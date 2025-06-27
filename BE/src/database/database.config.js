@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 require("dotenv").config();
-const uri = process.env.MONGO_URI_COMPASS;
+const uri = process.env.MONGO_URI_ATLAS;
 async function connect() {
   try {
     await mongoose.set("strictQuery", true);

@@ -44,12 +44,12 @@ import { Link } from "react-router-dom";
 import BrandPartners from "../../../components/BrandPartners/BrandPartners";
 
 // Import mock data
-import { getPopularServices } from "../../../mocks/services";
 import { getLatestTestimonials } from "../../../mocks/testimonials";
+import { getItems } from "../../../services/custom.api";
 
 function Home() {
   const [isLoading, setIsLoading] = useState(true);
-
+  const [services, setServices] = useState([]);
   useEffect(() => {
     // Initialize AOS animation library
     AOS.init({
@@ -58,7 +58,7 @@ function Home() {
       offset: 100,
       delay: 100,
     });
-
+    getServices();
     // Simulate loading for smoother transitions
     const timer = setTimeout(() => {
       setIsLoading(false);
@@ -67,20 +67,46 @@ function Home() {
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    console.log("Services state updated:", services);
+  }, [services]);
+
+  const getServices = async () => {
+    try {
+      console.log("Fetching services...");
+      const res = await getItems("admin/get-services");
+      console.log("API Response:", res);
+      console.log("Services data:", res.data);
+      console.log("Services array length:", res.data?.length);
+      setServices(res.data || []);
+    } catch (error) {
+      console.error("Error fetching services:", error);
+      setServices([]);
+    }
+  };
+
   // Get data from mocks
-  const services = getPopularServices();
+  // const services = getPopularServices();
   const testimonials = getLatestTestimonials(3);
 
   // Icon mapping
   const iconMap = {
-    FaSnowflake: <FaSnowflake className="text-4xl" />,
-    MdKitchen: <MdKitchen className="text-4xl" />,
-    MdLocalLaundryService: <MdLocalLaundryService className="text-4xl" />,
-    FaTv: <FaTv className="text-4xl" />,
-    FaFireAlt: <FaFireAlt className="text-4xl" />,
-    MdMicrowave: <MdMicrowave className="text-4xl" />,
-    FaFan: <FaFan className="text-4xl" />,
-    MdWaterDrop: <MdWaterDrop className="text-4xl" />,
+    "Điện lạnh": <FaSnowflake className="text-4xl" />,
+    "Điện gia dụng": <MdKitchen className="text-4xl" />,
+    "Điện tử": <FaTv className="text-4xl" />,
+    "Điện máy": <MdLocalLaundryService className="text-4xl" />,
+    "Điện nước": <MdWaterDrop className="text-4xl" />,
+    Khác: <FiTool className="text-4xl" />,
+  };
+
+  // Color mapping for services
+  const colorMap = {
+    "Điện lạnh": "from-blue-500 to-cyan-500",
+    "Điện gia dụng": "from-green-500 to-emerald-500",
+    "Điện tử": "from-red-500 to-pink-500",
+    "Điện máy": "from-purple-500 to-violet-500",
+    "Điện nước": "from-blue-500 to-indigo-500",
+    Khác: "from-gray-500 to-slate-500",
   };
 
   const process = [
@@ -460,48 +486,88 @@ function Home() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-10 mb-16">
-            {services.map((service, index) => (
-              <div
-                key={service.id}
-                className="group bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 cursor-pointer overflow-hidden border border-slate-200/50 hover:border-blue-300/50 hover:-translate-y-2"
-                data-aos="fade-up"
-                data-aos-delay={index * 100}>
-                <div className="p-8 sm:p-10">
-                  <div className="relative mb-8">
-                    <div
-                      className={`w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br ${service.color} rounded-3xl flex items-center justify-center text-white group-hover:scale-110 transition-transform duration-500 shadow-2xl border border-white/50 relative z-10`}>
-                      {iconMap[service.icon]}
-                    </div>
-                    <div
-                      className={`absolute inset-0 w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br ${service.color} rounded-3xl blur-xl opacity-30 group-hover:opacity-50 transition-opacity duration-500`}></div>
-                  </div>
-                  <h3 className="text-2xl font-bold text-slate-900 mb-4 group-hover:text-blue-700 transition-colors">
-                    {service.name}
-                  </h3>
-                  <p className="text-slate-600 mb-6 leading-relaxed text-lg">
-                    {service.description}
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col">
-                      <span className="text-sm text-slate-500 font-medium">
-                        Giá từ
-                      </span>
-                      <span className="text-2xl font-bold text-emerald-600">
-                        {service.price.from.toLocaleString("vi-VN")}đ
-                      </span>
-                    </div>
-                    <Link
-                      to="/services"
-                      className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-2xl font-semibold group-hover:from-blue-700 group-hover:to-indigo-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
-                      <span>Xem chi tiết</span>
-                      <FiArrowRight className="group-hover:translate-x-1 transition-transform" />
-                    </Link>
-                  </div>
-                </div>
-                <div
-                  className={`h-2 bg-gradient-to-r ${service.color} transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500`}></div>
+            {!services || services.length === 0 ? (
+              <div className="col-span-full text-center py-12">
+                <p className="text-gray-500 text-lg">Đang tải dịch vụ...</p>
               </div>
-            ))}
+            ) : (
+              services?.map((service, index) => (
+                <div
+                  key={service._id}
+                  className="group bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 cursor-pointer overflow-hidden border border-slate-200/50 hover:border-blue-300/50 hover:-translate-y-2"
+                  data-aos="fade-up"
+                  data-aos-delay={index * 100}>
+                  <div className="p-8 sm:p-10">
+                    <div className="relative mb-8">
+                      <div
+                        className={`w-32 h-32 sm:w-36 sm:h-36 bg-gradient-to-br ${
+                          colorMap[service.category] ||
+                          "from-gray-500 to-slate-500"
+                        } rounded-3xl flex items-center justify-center text-white group-hover:scale-110 transition-transform duration-500 shadow-2xl border border-white/50 relative z-10 overflow-hidden`}>
+                        {service.images &&
+                        service.images.length > 0 &&
+                        service.images[0].url ? (
+                          <img
+                            src={service.images[0].url}
+                            alt={service.name}
+                            className="w-full h-full object-cover rounded-3xl"
+                            onError={(e) => {
+                              e.target.style.display = "none";
+                              e.target.nextSibling.style.display = "flex";
+                            }}
+                          />
+                        ) : null}
+                        <div
+                          className={`w-full h-full flex items-center justify-center ${
+                            service.images &&
+                            service.images.length > 0 &&
+                            service.images[0].url
+                              ? "hidden"
+                              : "flex"
+                          }`}>
+                          {iconMap[service.category] || (
+                            <FiTool className="text-5xl" />
+                          )}
+                        </div>
+                      </div>
+                      <div
+                        className={`absolute inset-0 w-32 h-32 sm:w-36 sm:h-36 bg-gradient-to-br ${
+                          colorMap[service.category] ||
+                          "from-gray-500 to-slate-500"
+                        } rounded-3xl blur-xl opacity-30 group-hover:opacity-50 transition-opacity duration-500`}></div>
+                    </div>
+                    <h3 className="text-2xl font-bold text-slate-900 mb-4 group-hover:text-blue-700 transition-colors">
+                      {service.name}
+                    </h3>
+                    <p className="text-slate-600 mb-6 leading-relaxed text-lg">
+                      {service.description}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <span className="text-sm text-slate-500 font-medium">
+                          Giá từ
+                        </span>
+                        <span className="text-2xl font-bold text-emerald-600">
+                          {service.basePrice?.toLocaleString("vi-VN") ||
+                            "Liên hệ"}
+                          đ
+                        </span>
+                      </div>
+                      <Link
+                        to="/services"
+                        className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-2xl font-semibold group-hover:from-blue-700 group-hover:to-indigo-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                        <span>Xem chi tiết</span>
+                        <FiArrowRight className="group-hover:translate-x-1 transition-transform" />
+                      </Link>
+                    </div>
+                  </div>
+                  <div
+                    className={`h-2 bg-gradient-to-r ${
+                      colorMap[service.category] || "from-gray-500 to-slate-500"
+                    } transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500`}></div>
+                </div>
+              ))
+            )}
           </div>
 
           <div className="text-center">

@@ -17,6 +17,7 @@ import { FaTools, FaUserCircle } from "react-icons/fa";
 import BookingModal from "../BookingModal/BookingModal";
 import { Dropdown, Space, Avatar, Button } from "antd";
 import { UserContext } from "../../contexts/UserContext";
+import { getItems } from "../../services/custom.api";
 
 // Add custom styles for mobile dropdown
 const mobileDropdownStyle = `
@@ -52,7 +53,7 @@ function Header() {
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const location = useLocation();
   const { userData } = useContext(UserContext);
-
+  const [services, setServices] = useState([]);
   // Handle scroll effect
   useEffect(() => {
     const handleScroll = () => {
@@ -69,10 +70,17 @@ function Header() {
         setIsSearchOpen(false);
       }
     };
-
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isSearchOpen]);
+
+  useEffect(() => {
+    getServices();
+  }, []);
+  const getServices = async () => {
+    const res = await getItems("admin/get-services");
+    setServices(res.data.data);
+  };
 
   const navItems = [
     { name: "Trang chủ", href: "/" },
@@ -80,6 +88,8 @@ function Header() {
     { name: "Đặt lịch", href: "/booking", highlight: true },
     { name: "Giới thiệu", href: "/about" },
     { name: "Liên hệ", href: "/contact" },
+    { name: "Tin tức", href: "/blog" },
+    { name: "Đăng ký kỹ thuật viên", href: "/register-technician" },
   ];
 
   const handleLogout = () => {
@@ -279,15 +289,13 @@ function Header() {
                         Tìm kiếm phổ biến
                       </p>
                       <div className="flex flex-wrap gap-2">
-                        {["iPhone", "Samsung", "Laptop", "Máy tính bảng"].map(
-                          (tag) => (
-                            <span
-                              key={tag}
-                              className="px-3 py-1 bg-gray-100 hover:bg-blue-50 text-xs rounded-full cursor-pointer transition-colors">
-                              {tag}
-                            </span>
-                          )
-                        )}
+                        {services?.map((service) => (
+                          <span
+                            key={service._id}
+                            className="px-3 py-1 bg-gray-100 hover:bg-blue-50 text-xs rounded-full cursor-pointer transition-colors">
+                            {service.name}
+                          </span>
+                        ))}
                       </div>
                     </div>
                   </div>

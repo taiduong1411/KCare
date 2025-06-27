@@ -234,7 +234,7 @@ module.exports = {
         },
       });
       var mailOptions = {
-        from: '"Besign. Customer Support" <djtimz1411@gmail.com>',
+        from: '"KCare Customer Support" <djtimz1411@gmail.com>',
         to: mail,
         subject: subject,
         text: message,
@@ -385,12 +385,12 @@ module.exports = {
                     <div class="container">
                         <div class="header">
                             <div class="header-logo">B</div>
-                            <h1>Besign. Customer Support</h1>
+                            <h1>KCare. Customer Support</h1>
                         </div>
                         <div class="content">
                             <div class="success-icon">🎉</div>
-                            <h2>Chúc mừng! Bạn đã trở thành người bán</h2>
-                            <p>Tài khoản của bạn đã được phê duyệt thành công và bây giờ bạn có thể bắt đầu bán hàng trên Besign.</p>
+                            <h2>Chúc mừng! Bạn đã trở thành kỹ thuật viên</h2>
+                            <p>Tài khoản của bạn đã được phê duyệt thành công và bây giờ bạn có thể bắt đầu làm việc trên KCare.</p>
                             
                             <div class="message-box">
                                 <p>${message}</p>
@@ -399,16 +399,12 @@ module.exports = {
                             <div class="next-steps">
                                 <h3>Các bước tiếp theo</h3>
                                 <ul>
-                                    <li>Đăng nhập vào tài khoản người bán của bạn</li>
-                                    <li>Hoàn thiện thông tin cửa hàng và thương hiệu</li>
-                                    <li>Bắt đầu đăng sản phẩm đầu tiên của bạn</li>
+                                    <li>Đăng nhập vào tài khoản kỹ thuật viên của bạn</li>
+                                    <li>Hoàn thiện thông tin kỹ thuật viên</li>
+                                    <li>Bắt đầu đăng ký dịch vụ</li>
                                     <li>Thiết lập các phương thức thanh toán</li>
                                 </ul>
                             </div>
-                            
-                            <a href="https://besign.vn/seller/dashboard" class="button">Truy cập cửa hàng của bạn</a>
-                            
-                            <p class="support">Cần trợ giúp? Liên hệ đội ngũ hỗ trợ của chúng tôi tại <a href="mailto:support@besign.vn">support@besign.vn</a></p>
                         </div>
                         <div class="footer">
                             <div class="social">

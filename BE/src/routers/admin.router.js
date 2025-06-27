@@ -12,11 +12,7 @@ router.delete("/delete-service/:id", adminAuth, AdminController.deleteService);
 // Contact
 router.post("/reply-customer-email", adminAuth, AdminController.replyCustomer);
 // technician
-router.get(
-  "/get-all-technicians",
-  adminAuth,
-  AdminController.getAllTechnicians
-);
+router.get("/get-all-technicians", AdminController.getAllTechnicians);
 router.get(
   "/get-technician-by-id/:id",
   adminAuth,
