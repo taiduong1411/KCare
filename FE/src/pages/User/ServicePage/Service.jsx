@@ -3,6 +3,7 @@ import Header from "../../../components/Header/Header";
 import Footer from "../../../components/Footer/Footer";
 import AOS from "aos";
 import "aos/dist/aos.css";
+import { getItems } from "../../../services/custom.api";
 import {
   FiCheckCircle,
   FiClock,
@@ -35,6 +36,12 @@ import {
 import { BiWater } from "react-icons/bi";
 
 function Service() {
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [showPricing, setShowPricing] = useState(null);
+  const [services, setServices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   useEffect(() => {
     AOS.init({
       duration: 1000,
@@ -43,223 +50,185 @@ function Service() {
     });
   }, []);
 
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  const [showPricing, setShowPricing] = useState(null);
+  // Fetch services từ API
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        setLoading(true);
+        const response = await getItems("/admin/get-services");
+        if (response.status === 200) {
+          // Map dữ liệu từ API thành format mà component expect
+          const mappedServices = response.data.map((service, index) => ({
+            id: service._id,
+            icon: getServiceIcon(service.category),
+            name: service.name,
+            category: getCategorySlug(service.category),
+            description: service.description,
+            features: getServiceFeatures(service.category),
+            pricing: {
+              basic: formatPrice(service.basePrice),
+              detail: getServicePricingDetail(
+                service.category,
+                service.basePrice
+              ),
+            },
+            time: `${service.duration} phút`,
+            warranty: getServiceWarranty(service.category),
+            color: getServiceColor(index),
+          }));
 
-  const services = [
-    {
-      id: 1,
-      icon: <FaSnowflake className="text-4xl" />,
-      name: "Sửa máy lạnh",
-      category: "cooling",
-      description:
-        "Sửa chữa, bảo trì máy lạnh các loại: treo tường, âm trần, tủ đứng",
-      features: [
+          setServices(mappedServices);
+        } else {
+          setError("Không thể tải dữ liệu dịch vụ");
+        }
+      } catch (error) {
+        console.error("Error fetching services:", error);
+        setError("Lỗi khi tải dữ liệu dịch vụ");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchServices();
+  }, []);
+
+  // Helper functions to map API data to component format
+  const getServiceIcon = (category) => {
+    const iconMap = {
+      "Điện lạnh": <FaSnowflake className="text-4xl" />,
+      "Điện gia dụng": <MdLocalLaundryService className="text-4xl" />,
+      "Điện tử": <FaTv className="text-4xl" />,
+      "Điện máy": <MdKitchen className="text-4xl" />,
+      "Điện nước": <BiWater className="text-4xl" />,
+      Khác: <FaTools className="text-4xl" />,
+    };
+    return iconMap[category] || <FaWrench className="text-4xl" />;
+  };
+
+  const getCategorySlug = (category) => {
+    const categoryMap = {
+      "Điện lạnh": "cooling",
+      "Điện gia dụng": "laundry",
+      "Điện tử": "electronics",
+      "Điện máy": "kitchen",
+      "Điện nước": "bathroom",
+      Khác: "maintenance",
+    };
+    return categoryMap[category] || "maintenance";
+  };
+
+  const getServiceFeatures = (category) => {
+    const featuresMap = {
+      "Điện lạnh": [
         "Kiểm tra và sửa chữa máy không lạnh",
         "Nạp gas máy lạnh",
         "Vệ sinh máy lạnh định kỳ",
         "Sửa máy lạnh bị chảy nước",
         "Thay linh kiện chính hãng",
       ],
-      pricing: {
-        basic: "150.000đ",
-        detail: [
-          { service: "Kiểm tra cơ bản", price: "Miễn phí nếu sửa" },
-          { service: "Vệ sinh máy lạnh", price: "150.000 - 250.000đ" },
-          { service: "Nạp gas", price: "200.000 - 400.000đ" },
-          { service: "Sửa board mạch", price: "500.000 - 1.500.000đ" },
-        ],
-      },
-      time: "30-60 phút",
-      warranty: "6 tháng",
-      color: "from-blue-400 to-blue-600",
-    },
-    {
-      id: 2,
-      icon: <MdLocalLaundryService className="text-4xl" />,
-      name: "Sửa máy giặt",
-      category: "laundry",
-      description:
-        "Sửa chữa máy giặt cửa trên, cửa trước, lồng đứng, lồng ngang",
-      features: [
+      "Điện gia dụng": [
         "Máy giặt không vào điện",
         "Không xả nước, không vắt",
         "Lồng giặt không quay",
         "Máy giặt kêu to bất thường",
         "Thay linh kiện chính hãng",
       ],
-      pricing: {
-        basic: "200.000đ",
-        detail: [
-          { service: "Kiểm tra tại nhà", price: "Miễn phí nếu sửa" },
-          { service: "Thay dây curoa", price: "200.000 - 300.000đ" },
-          { service: "Sửa board điều khiển", price: "400.000 - 1.200.000đ" },
-          { service: "Thay động cơ", price: "800.000 - 2.000.000đ" },
-        ],
-      },
-      time: "45-90 phút",
-      warranty: "6 tháng",
-      color: "from-purple-400 to-purple-600",
-    },
-    {
-      id: 3,
-      icon: <MdKitchen className="text-4xl" />,
-      name: "Sửa tủ lạnh",
-      category: "cooling",
-      description:
-        "Sửa chữa tủ lạnh các loại: mini, 2 cánh, side by side, inverter",
-      features: [
-        "Tủ lạnh không lạnh",
-        "Tủ lạnh bị đóng tuyết",
-        "Chảy nước, kêu to",
-        "Không vào điện",
-        "Nạp gas tủ lạnh",
-      ],
-      pricing: {
-        basic: "250.000đ",
-        detail: [
-          { service: "Kiểm tra cơ bản", price: "Miễn phí nếu sửa" },
-          { service: "Nạp gas", price: "300.000 - 500.000đ" },
-          { service: "Thay block", price: "1.500.000 - 3.000.000đ" },
-          { service: "Sửa board", price: "500.000 - 1.500.000đ" },
-        ],
-      },
-      time: "60-120 phút",
-      warranty: "12 tháng",
-      color: "from-green-400 to-green-600",
-    },
-    {
-      id: 4,
-      icon: <FaTv className="text-4xl" />,
-      name: "Sửa tivi",
-      category: "electronics",
-      description: "Sửa chữa TV LED, LCD, Smart TV, OLED các hãng",
-      features: [
+      "Điện tử": [
         "Màn hình không lên",
         "Hình ảnh bị sọc, nhiễu",
         "Không có âm thanh",
         "Remote không hoạt động",
         "Nâng cấp phần mềm Smart TV",
       ],
-      pricing: {
-        basic: "200.000đ",
-        detail: [
-          { service: "Kiểm tra tại nhà", price: "100.000đ" },
-          { service: "Thay led màn hình", price: "300.000 - 800.000đ" },
-          { service: "Sửa nguồn", price: "400.000 - 1.000.000đ" },
-          { service: "Thay main board", price: "800.000 - 2.500.000đ" },
-        ],
-      },
-      time: "45-90 phút",
-      warranty: "3 tháng",
-      color: "from-indigo-400 to-indigo-600",
-    },
-    {
-      id: 5,
-      icon: <MdMicrowave className="text-4xl" />,
-      name: "Sửa lò vi sóng",
-      category: "kitchen",
-      description: "Sửa chữa lò vi sóng, lò nướng các loại",
-      features: [
-        "Không nóng thức ăn",
-        "Đĩa không quay",
-        "Phát ra tiếng kêu lạ",
-        "Bảng điều khiển lỗi",
-        "Thay bóng đèn",
+      "Điện máy": [
+        "Tủ lạnh không lạnh",
+        "Tủ lạnh bị đóng tuyết",
+        "Chảy nước, kêu to",
+        "Không vào điện",
+        "Nạp gas tủ lạnh",
       ],
-      pricing: {
-        basic: "150.000đ",
-        detail: [
-          { service: "Kiểm tra", price: "Miễn phí nếu sửa" },
-          { service: "Thay magnetron", price: "400.000 - 800.000đ" },
-          { service: "Sửa board", price: "300.000 - 600.000đ" },
-          { service: "Thay đĩa quay", price: "150.000 - 300.000đ" },
-        ],
-      },
-      time: "30-60 phút",
-      warranty: "3 tháng",
-      color: "from-orange-400 to-orange-600",
-    },
-    {
-      id: 6,
-      icon: <BiWater className="text-4xl" />,
-      name: "Sửa máy nước nóng",
-      category: "bathroom",
-      description:
-        "Sửa chữa máy nước nóng trực tiếp, gián tiếp, năng lượng mặt trời",
-      features: [
+      "Điện nước": [
         "Không nóng nước",
         "Nước nóng yếu",
         "Rò rỉ điện",
         "Bị chập cháy",
         "Thay thanh nhiệt",
       ],
-      pricing: {
-        basic: "180.000đ",
-        detail: [
-          { service: "Kiểm tra an toàn", price: "Miễn phí nếu sửa" },
-          { service: "Thay relay", price: "150.000 - 300.000đ" },
-          { service: "Thay thanh nhiệt", price: "250.000 - 500.000đ" },
-          { service: "Sửa bơm nước", price: "300.000 - 800.000đ" },
-        ],
-      },
-      time: "45-90 phút",
-      warranty: "6 tháng",
-      color: "from-red-400 to-red-600",
-    },
-    {
-      id: 7,
-      icon: <FaFire className="text-4xl" />,
-      name: "Sửa bếp gas/từ",
-      category: "kitchen",
-      description: "Sửa chữa bếp gas, bếp từ, bếp hồng ngoại các loại",
-      features: [
-        "Không lên lửa",
-        "Lửa yếu, không đều",
-        "Bếp từ không nhận nồi",
-        "Mặt kính bị nứt",
-        "Lỗi cảm biến nhiệt",
-      ],
-      pricing: {
-        basic: "150.000đ",
-        detail: [
-          { service: "Kiểm tra", price: "Miễn phí nếu sửa" },
-          { service: "Thay van gas", price: "200.000 - 400.000đ" },
-          { service: "Sửa board bếp từ", price: "400.000 - 1.200.000đ" },
-          { service: "Thay mặt kính", price: "800.000 - 2.000.000đ" },
-        ],
-      },
-      time: "30-75 phút",
-      warranty: "6 tháng",
-      color: "from-yellow-400 to-yellow-600",
-    },
-    {
-      id: 8,
-      icon: <FaTools className="text-4xl" />,
-      name: "Bảo trì định kỳ",
-      category: "maintenance",
-      description: "Dịch vụ bảo trì định kỳ cho các thiết bị gia dụng",
-      features: [
+      Khác: [
         "Kiểm tra tổng quát",
         "Vệ sinh thiết bị",
         "Thay thế linh kiện hao mòn",
         "Tư vấn sử dụng đúng cách",
         "Lịch nhắc bảo trì",
       ],
-      pricing: {
-        basic: "99.000đ/thiết bị",
-        detail: [
-          { service: "Gói 3 tháng", price: "250.000đ/thiết bị" },
-          { service: "Gói 6 tháng", price: "450.000đ/thiết bị" },
-          { service: "Gói 12 tháng", price: "800.000đ/thiết bị" },
-          { service: "Gói gia đình", price: "Báo giá riêng" },
-        ],
+    };
+    return (
+      featuresMap[category] || [
+        "Dịch vụ chuyên nghiệp",
+        "Thay linh kiện chính hãng",
+      ]
+    );
+  };
+
+  const getServicePricingDetail = (category, basePrice) => {
+    const basePriceNum = parseInt(basePrice);
+    return [
+      { service: "Kiểm tra cơ bản", price: "Miễn phí nếu sửa" },
+      {
+        service: "Sửa chữa thông thường",
+        price: `${formatPrice(basePriceNum)} - ${formatPrice(
+          basePriceNum * 2
+        )}`,
       },
-      time: "30-45 phút/thiết bị",
-      warranty: "Theo gói",
-      color: "from-gray-500 to-gray-700",
-    },
-  ];
+      {
+        service: "Thay linh kiện",
+        price: `${formatPrice(basePriceNum * 2)} - ${formatPrice(
+          basePriceNum * 4
+        )}`,
+      },
+      {
+        service: "Sửa chữa lớn",
+        price: `${formatPrice(basePriceNum * 3)} - ${formatPrice(
+          basePriceNum * 6
+        )}`,
+      },
+    ];
+  };
+
+  const getServiceWarranty = (category) => {
+    const warrantyMap = {
+      "Điện lạnh": "6 tháng",
+      "Điện gia dụng": "6 tháng",
+      "Điện tử": "3 tháng",
+      "Điện máy": "12 tháng",
+      "Điện nước": "6 tháng",
+      Khác: "3 tháng",
+    };
+    return warrantyMap[category] || "3 tháng";
+  };
+
+  const getServiceColor = (index) => {
+    const colors = [
+      "from-blue-400 to-blue-600",
+      "from-purple-400 to-purple-600",
+      "from-green-400 to-green-600",
+      "from-indigo-400 to-indigo-600",
+      "from-orange-400 to-orange-600",
+      "from-red-400 to-red-600",
+      "from-yellow-400 to-yellow-600",
+      "from-gray-500 to-gray-700",
+    ];
+    return colors[index % colors.length];
+  };
+
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: "VND",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(price);
+  };
 
   const categories = [
     { id: "all", name: "Tất cả", icon: <FaWrench /> },
@@ -393,100 +362,129 @@ function Service() {
       {/* Services Grid */}
       <section className="py-20 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filteredServices.map((service, index) => (
-              <div
-                key={service.id}
-                className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden"
-                data-aos="fade-up"
-                data-aos-delay={index * 100}>
-                <div className={`h-2 bg-gradient-to-r ${service.color}`}></div>
-                <div className="p-8">
-                  <div
-                    className={`w-20 h-20 bg-gradient-to-br ${service.color} rounded-xl flex items-center justify-center text-white mb-6 mx-auto`}>
-                    {service.icon}
-                  </div>
-                  <h3 className="text-2xl font-bold text-gray-900 mb-3 text-center">
-                    {service.name}
-                  </h3>
-                  <p className="text-gray-600 mb-6 text-center">
-                    {service.description}
-                  </p>
+          {loading && (
+            <div className="text-center py-20">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <p className="mt-4 text-gray-600">Đang tải dịch vụ...</p>
+            </div>
+          )}
 
-                  {/* Features */}
-                  <div className="space-y-3 mb-6">
-                    {service.features.map((feature, idx) => (
-                      <div key={idx} className="flex items-start gap-3">
-                        <FiCheckCircle className="text-green-500 mt-0.5 flex-shrink-0" />
-                        <span className="text-sm text-gray-700">{feature}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Quick Info */}
-                  <div className="border-t pt-6 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">Giá từ:</span>
-                      <span className="font-bold text-blue-600">
-                        {service.pricing.basic}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">Thời gian:</span>
-                      <span className="text-sm font-medium">
-                        {service.time}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">Bảo hành:</span>
-                      <span className="text-sm font-medium">
-                        {service.warranty}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* CTA Buttons */}
-                  <div className="mt-6 space-y-3">
-                    <button
-                      onClick={() =>
-                        setShowPricing(
-                          showPricing === service.id ? null : service.id
-                        )
-                      }
-                      className="w-full py-3 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-medium">
-                      Xem bảng giá chi tiết
-                    </button>
-                    <button className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all font-medium transform hover:scale-105">
-                      Đặt lịch ngay
-                    </button>
-                  </div>
-
-                  {/* Pricing Detail Dropdown */}
-                  {showPricing === service.id && (
-                    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                      <h4 className="font-semibold text-gray-900 mb-3">
-                        Bảng giá chi tiết:
-                      </h4>
-                      <div className="space-y-2">
-                        {service.pricing.detail.map((item, idx) => (
-                          <div
-                            key={idx}
-                            className="flex justify-between items-center text-sm">
-                            <span className="text-gray-700">
-                              {item.service}
-                            </span>
-                            <span className="font-medium text-gray-900">
-                              {item.price}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+          {error && (
+            <div className="text-center py-20">
+              <div className="text-red-600 mb-4">
+                <FiTool className="text-4xl mx-auto mb-2" />
+                <p className="text-lg font-semibold">Có lỗi xảy ra</p>
+                <p className="text-sm text-gray-600 mt-2">{error}</p>
               </div>
-            ))}
-          </div>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                Thử lại
+              </button>
+            </div>
+          )}
+
+          {!loading && !error && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {filteredServices.map((service, index) => (
+                <div
+                  key={service.id}
+                  className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden"
+                  data-aos="fade-up"
+                  data-aos-delay={index * 100}>
+                  <div
+                    className={`h-2 bg-gradient-to-r ${service.color}`}></div>
+                  <div className="p-8">
+                    <div
+                      className={`w-20 h-20 bg-gradient-to-br ${service.color} rounded-xl flex items-center justify-center text-white mb-6 mx-auto`}>
+                      {service.icon}
+                    </div>
+                    <h3 className="text-2xl font-bold text-gray-900 mb-3 text-center">
+                      {service.name}
+                    </h3>
+                    <p className="text-gray-600 mb-6 text-center">
+                      {service.description}
+                    </p>
+
+                    {/* Features */}
+                    <div className="space-y-3 mb-6">
+                      {service.features.map((feature, idx) => (
+                        <div key={idx} className="flex items-start gap-3">
+                          <FiCheckCircle className="text-green-500 mt-0.5 flex-shrink-0" />
+                          <span className="text-sm text-gray-700">
+                            {feature}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Quick Info */}
+                    <div className="border-t pt-6 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">Giá từ:</span>
+                        <span className="font-bold text-blue-600">
+                          {service.pricing.basic}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">
+                          Thời gian:
+                        </span>
+                        <span className="text-sm font-medium">
+                          {service.time}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">Bảo hành:</span>
+                        <span className="text-sm font-medium">
+                          {service.warranty}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* CTA Buttons */}
+                    <div className="mt-6 space-y-3">
+                      <button
+                        onClick={() =>
+                          setShowPricing(
+                            showPricing === service.id ? null : service.id
+                          )
+                        }
+                        className="w-full py-3 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-medium">
+                        Xem bảng giá chi tiết
+                      </button>
+                      <button className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all font-medium transform hover:scale-105">
+                        Đặt lịch ngay
+                      </button>
+                    </div>
+
+                    {/* Pricing Detail Dropdown */}
+                    {showPricing === service.id && (
+                      <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                        <h4 className="font-semibold text-gray-900 mb-3">
+                          Bảng giá chi tiết:
+                        </h4>
+                        <div className="space-y-2">
+                          {service.pricing.detail.map((item, idx) => (
+                            <div
+                              key={idx}
+                              className="flex justify-between items-center text-sm">
+                              <span className="text-gray-700">
+                                {item.service}
+                              </span>
+                              <span className="font-medium text-gray-900">
+                                {item.price}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

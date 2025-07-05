@@ -20,14 +20,10 @@ const AccountController = {
         return res.status(400).json({ msg: "Số điện thoại đã được sử dụng" });
       }
 
-      // Mã hóa mật khẩu
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
-
-      // Tạo tài khoản mới với role user
+      // Tạo tài khoản mới với role user (password sẽ được hash bởi pre-save middleware)
       const newAccount = new Accounts({
         email,
-        password: hashedPassword,
+        password: password,
         fullName,
         phone,
         address,
@@ -64,7 +60,7 @@ const AccountController = {
       if (!account) {
         return res.status(400).json({ msg: "Tài khoản không tồn tại" });
       }
-      const isPasswordValid = await bcrypt.compare(password, account.password);
+      const isPasswordValid = await account.comparePassword(password);
       if (!isPasswordValid) {
         return res.status(400).json({ msg: "Mật khẩu không đúng" });
       }
@@ -124,8 +120,7 @@ const AccountController = {
         if (otp.code !== req.body.code)
           return res.status(401).json({ msg: "Mã Xác Thực Không Đúng" });
         let user = await Accounts.findOne({ email: otp.email });
-        const hash = bcrypt.hashSync(req.body.password, 5);
-        user.password = hash;
+        user.password = req.body.password; // Sẽ được hash bởi pre-save middleware
         await user.save();
         return res.status(200).json({ msg: "Thay Đổi Mật Khẩu Thành Công" });
       });
@@ -198,10 +193,7 @@ const AccountController = {
       }
 
       // 2. Verify password
-      const isPasswordValid = await bcrypt.compare(
-        password,
-        existingAccount.password
-      );
+      const isPasswordValid = await existingAccount.comparePassword(password);
       if (!isPasswordValid) {
         return res.status(400).json({
           msg: "Mật khẩu không đúng",
@@ -283,7 +275,7 @@ const AccountController = {
       await savedTechnician.populate("services", "name category basePrice");
 
       return res.status(201).json({
-        msg: "Đăng ký kỹ thuật viên thành công! Vui lòng chờ admin phê duyệt và thông báo về việc ký quỹ 1,000,000 VNĐ.",
+        msg: "Đăng ký kỹ thuật viên thành công! Vui lòng chờ admin phê duyệt. Khi được phê duyệt, ký quỹ sẽ được tự động xử lý và bạn có thể bắt đầu nhận đơn hàng.",
         technician: {
           id: savedTechnician._id,
           fullName: savedTechnician.fullName,

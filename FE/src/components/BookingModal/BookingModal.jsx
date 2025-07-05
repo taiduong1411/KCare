@@ -8,7 +8,6 @@ import {
   DatePicker,
   TimePicker,
   Button,
-  message,
 } from "antd";
 import {
   UserOutlined,
@@ -36,14 +35,16 @@ import {
 import dayjs from "dayjs";
 import "dayjs/locale/vi";
 import locale from "antd/locale/vi_VN";
-import { getItems } from "../../services/custom.api";
+import { getItems, addItems } from "../../services/custom.api";
 import { UserContext } from "../../contexts/UserContext";
+import { useNotification } from "../../contexts/NotificationContext";
+
 const { TextArea } = Input;
 const { Option } = Select;
 
 function BookingModal({ isOpen, onClose, selectedService = null }) {
   const { userData } = useContext(UserContext);
-
+  const { showNotification } = useNotification();
   const {
     control,
     handleSubmit,
@@ -153,19 +154,25 @@ function BookingModal({ isOpen, onClose, selectedService = null }) {
         ...data,
         date: data.date ? dayjs(data.date).format("YYYY-MM-DD") : null,
       };
+      console.log(submitData);
 
-      console.log("Quick booking:", submitData);
-
-      setIsSubmitted(true);
-      message.success("Đặt lịch thành công!");
-      setTimeout(() => {
-        onClose();
-        setIsSubmitted(false);
-        reset();
-      }, 2000);
+      await addItems("booking/create-booking", submitData).then((res) => {
+        if (res.status === 200) {
+          setIsSubmitted(true);
+          showNotification("success", "Đặt lịch thành công!");
+          setTimeout(() => {
+            onClose();
+            setIsSubmitted(false);
+            reset();
+          }, 2000);
+        } else {
+          console.log(res.data);
+          showNotification("error", res.data.message);
+        }
+      });
     } catch (error) {
       console.error("Error submitting form:", error);
-      message.error("Có lỗi xảy ra, vui lòng thử lại!");
+      showNotification("error", "Có lỗi xảy ra, vui lòng thử lại!");
     }
   };
 

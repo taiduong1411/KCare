@@ -3,9 +3,10 @@ import { useForm } from "react-hook-form";
 import Header from "../../../components/Header/Header";
 import Footer from "../../../components/Footer/Footer";
 import { UserContext } from "../../../contexts/UserContext";
-import { putItems } from "../../../services/custom.api";
+import { putItems, getItems } from "../../../services/custom.api";
 import { useNotification } from "../../../contexts/NotificationContext";
 import upload from "../../../services/cloudinary";
+import Timeline from "../../../components/Timeline/Timeline";
 
 // Icons for input fields
 const UserIcon = (props) => (
@@ -98,6 +99,9 @@ function Profile() {
   const [avatarPreview, setAvatarPreview] = useState(null);
   const fileInputRef = useRef(null);
 
+  // States for orders
+  const [loading, setLoading] = useState(false);
+
   const {
     register,
     handleSubmit,
@@ -161,40 +165,74 @@ function Profile() {
     setFile("");
   };
 
-  const [orders] = useState([
-    {
-      id: "DH001",
-      date: "2024-03-15",
-      service: "Sửa điều hòa",
-      technician: "Kỹ thuật viên A",
-      status: "completed",
-      total: "500.000",
-    },
-    {
-      id: "DH002",
-      date: "2024-03-14",
-      service: "Sửa máy giặt",
-      technician: "Kỹ thuật viên B",
-      status: "pending",
-      total: "400.000",
-    },
-    {
-      id: "DH003",
-      date: "2024-03-13",
-      service: "Sửa tủ lạnh",
-      technician: "Kỹ thuật viên C",
-      status: "cancelled",
-      total: "600.000",
-    },
-  ]);
+  const [orders, setOrders] = useState([]);
+
+  // Fetch orders when orders tab is active
+  useEffect(() => {
+    if (activeTab === "orders") {
+      fetchOrders();
+    }
+  }, [activeTab]);
+
+  const fetchOrders = async () => {
+    try {
+      setLoading(true);
+      const response = await getItems("/booking/my-bookings");
+      if (response.status === 200) {
+        setOrders(response.data.data || []);
+      } else {
+        showNotification("error", "Không thể tải danh sách đơn hàng");
+      }
+    } catch (error) {
+      console.error("Error fetching orders:", error);
+      showNotification("error", "Lỗi khi tải danh sách đơn hàng");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelBooking = async (orderId) => {
+    if (!window.confirm("Bạn có chắc chắn muốn hủy đơn hàng này?")) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await putItems(`/booking/${orderId}/cancel`, {
+        reason: "Khách hàng hủy",
+      });
+
+      if (response.status === 200) {
+        showNotification("success", "Hủy đơn hàng thành công");
+        fetchOrders(); // Reload orders
+      } else {
+        showNotification("error", "Không thể hủy đơn hàng");
+      }
+    } catch (error) {
+      console.error("Error cancelling booking:", error);
+      showNotification("error", "Lỗi khi hủy đơn hàng");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const canCancelOrder = (status) => {
+    return ["pending", "accepted"].includes(status);
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
       case "completed":
         return "bg-gradient-to-r from-green-100 to-emerald-100 text-green-800";
       case "pending":
+        return "bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800";
+      case "accepted":
         return "bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-800";
+      case "in_progress":
+        return "bg-gradient-to-r from-purple-100 to-violet-100 text-purple-800";
       case "cancelled":
+        return "bg-gradient-to-r from-red-100 to-pink-100 text-red-800";
+      case "cancelled_with_fee":
         return "bg-gradient-to-r from-red-100 to-pink-100 text-red-800";
       default:
         return "bg-gradient-to-r from-slate-100 to-gray-100 text-slate-800";
@@ -206,12 +244,32 @@ function Profile() {
       case "completed":
         return "Hoàn thành";
       case "pending":
-        return "Đang xử lý";
+        return "Đang chờ";
+      case "accepted":
+        return "Đã nhận";
+      case "in_progress":
+        return "Đang thực hiện";
       case "cancelled":
         return "Đã hủy";
+      case "cancelled_with_fee":
+        return "Đã hủy (có phí)";
       default:
         return status;
     }
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString("vi-VN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const formatPrice = (amount) => {
+    return new Intl.NumberFormat("vi-VN").format(amount);
   };
 
   const InputField = ({
@@ -612,7 +670,16 @@ function Profile() {
         {/* Orders Tab */}
         {activeTab === "orders" && (
           <div className="space-y-6">
-            {orders.length === 0 ? (
+            {loading ? (
+              <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl border border-slate-200/50 p-16 text-center">
+                <div className="inline-flex items-center gap-3">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <span className="text-lg font-semibold text-slate-700">
+                    Đang tải...
+                  </span>
+                </div>
+              </div>
+            ) : orders.length === 0 ? (
               <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl border border-slate-200/50 p-16 text-center">
                 <div className="w-24 h-24 bg-gradient-to-br from-slate-100 to-slate-200 rounded-full flex items-center justify-center mx-auto mb-6">
                   <svg
@@ -632,94 +699,216 @@ function Profile() {
                 <p className="text-slate-600 mb-6">
                   Bạn chưa có đơn hàng nào. Hãy đặt dịch vụ đầu tiên!
                 </p>
-                <button className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-2xl hover:from-blue-700 hover:to-indigo-700 transform hover:scale-105 transition-all duration-300 shadow-xl">
+                <button
+                  onClick={() => (window.location.href = "/dat-lich")}
+                  className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-2xl hover:from-blue-700 hover:to-indigo-700 transform hover:scale-105 transition-all duration-300 shadow-xl">
                   Đặt dịch vụ ngay
                 </button>
               </div>
             ) : (
-              <div className="grid gap-6">
+              <div className="grid gap-3">
                 {orders.map((order, index) => (
                   <div
-                    key={order.id}
-                    className="group bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl hover:shadow-2xl border border-slate-200/50 hover:border-blue-300/50 transition-all duration-500 hover:-translate-y-1 overflow-hidden"
-                    style={{ animationDelay: `${index * 100}ms` }}>
-                    <div className="p-8">
-                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                    key={order._id}
+                    className="group bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl border border-slate-200/60 hover:border-blue-300/60 transition-all duration-300 overflow-hidden"
+                    style={{ animationDelay: `${index * 50}ms` }}>
+                    {/* Status bar */}
+                    <div
+                      className={`h-1 ${
+                        order.status === "completed"
+                          ? "bg-gradient-to-r from-green-400 to-emerald-500"
+                          : order.status === "pending"
+                          ? "bg-gradient-to-r from-blue-400 to-indigo-500"
+                          : order.status === "accepted"
+                          ? "bg-gradient-to-r from-yellow-400 to-orange-500"
+                          : order.status === "in_progress"
+                          ? "bg-gradient-to-r from-purple-400 to-violet-500"
+                          : "bg-gradient-to-r from-red-400 to-pink-500"
+                      }`}></div>
+
+                    <div className="p-4">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        {/* Left section - Order info */}
                         <div className="flex-1">
-                          <div className="flex items-center gap-4 mb-4">
-                            <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-2xl flex items-center justify-center">
-                              <svg
-                                className="w-6 h-6 text-blue-600"
-                                fill="currentColor"
-                                viewBox="0 0 20 20">
-                                <path
-                                  fillRule="evenodd"
-                                  d="M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4z"
-                                  clipRule="evenodd"
-                                />
-                                <path d="M10 5a2 2 0 012-2h3a1 1 0 011 1v6a3 3 0 01-3 3h-2V5z" />
-                              </svg>
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-xl flex items-center justify-center">
+                                <svg
+                                  className="w-4 h-4 text-blue-600"
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20">
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4z"
+                                    clipRule="evenodd"
+                                  />
+                                  <path d="M10 5a2 2 0 012-2h3a1 1 0 011 1v6a3 3 0 01-3 3h-2V5z" />
+                                </svg>
+                              </div>
+                              <div>
+                                <h3 className="text-lg font-bold text-slate-900">
+                                  #{order.orderCode}
+                                </h3>
+                                <p className="text-sm text-slate-500">
+                                  {formatDate(order.scheduledTime)}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <h3 className="text-xl font-bold text-slate-900">
-                                #{order.id}
-                              </h3>
-                              <p className="text-slate-600 font-medium">
-                                {new Date(order.date).toLocaleDateString(
-                                  "vi-VN"
-                                )}
-                              </p>
-                            </div>
-                          </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                            <div>
-                              <p className="text-sm font-semibold text-slate-500 mb-1">
-                                Dịch vụ
-                              </p>
-                              <p className="text-lg font-bold text-slate-900">
-                                {order.service}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-500 mb-1">
-                                Kỹ thuật viên
-                              </p>
-                              <p className="text-lg font-bold text-slate-900">
-                                {order.technician}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row lg:flex-col gap-4 lg:items-end">
-                          <div className="text-center lg:text-right">
-                            <p className="text-sm font-semibold text-slate-500 mb-2">
-                              Tổng tiền
-                            </p>
-                            <p className="text-3xl font-black text-emerald-600">
-                              {order.total} đ
-                            </p>
-                          </div>
-
-                          <div className="flex flex-col sm:flex-row gap-3">
+                            {/* Status badge */}
                             <span
-                              className={`px-6 py-3 inline-flex items-center justify-center text-sm font-bold rounded-2xl border-2 ${getStatusColor(
+                              className={`px-3 py-1 text-xs font-bold rounded-full ${getStatusColor(
                                 order.status
-                              )} ${
-                                order.status === "completed"
-                                  ? "border-green-200"
-                                  : order.status === "pending"
-                                  ? "border-yellow-200"
-                                  : "border-red-200"
-                              }`}>
+                              )}`}>
                               {getStatusText(order.status)}
                             </span>
+                          </div>
 
-                            <button className="group inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-2xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-300 shadow-lg hover:shadow-xl">
-                              <span>Chi tiết</span>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Service */}
+                            <div>
+                              <p className="text-xs font-semibold text-slate-400 mb-1">
+                                Dịch vụ
+                              </p>
+                              <p className="text-sm font-semibold text-slate-800">
+                                {order.service?.name || "Chưa xác định"}
+                              </p>
+                            </div>
+
+                            {/* Technician */}
+                            <div>
+                              <p className="text-xs font-semibold text-slate-400 mb-1">
+                                Kỹ thuật viên
+                              </p>
+                              {order.technician ? (
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0">
+                                      {order.technician.account?.avatar ? (
+                                        <img
+                                          src={order.technician.account.avatar}
+                                          alt={
+                                            order.technician.account
+                                              ?.fullName || "Technician"
+                                          }
+                                          className="w-full h-full object-cover"
+                                        />
+                                      ) : (
+                                        <div className="w-full h-full bg-green-100 flex items-center justify-center">
+                                          <svg
+                                            className="w-3 h-3 text-green-600"
+                                            fill="currentColor"
+                                            viewBox="0 0 20 20">
+                                            <path
+                                              fillRule="evenodd"
+                                              d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
+                                              clipRule="evenodd"
+                                            />
+                                          </svg>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-semibold text-slate-800">
+                                        {order.technician.account?.fullName ||
+                                          "N/A"}
+                                      </p>
+                                      {order.technician.account?.phone && (
+                                        <p className="text-xs text-slate-500 flex items-center gap-1">
+                                          <svg
+                                            className="w-3 h-3 text-slate-400"
+                                            fill="currentColor"
+                                            viewBox="0 0 20 20">
+                                            <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                                          </svg>
+                                          {order.technician.account.phone}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <svg
+                                      className="w-3 h-3 text-blue-600"
+                                      fill="currentColor"
+                                      viewBox="0 0 20 20">
+                                      <path
+                                        fillRule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
+                                        clipRule="evenodd"
+                                      />
+                                    </svg>
+                                  </div>
+                                  <p className="text-sm font-semibold text-blue-600">
+                                    Đang phân công
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Notes - only if exists */}
+                          {order.description && (
+                            <div className="mt-3">
+                              <p className="text-xs text-slate-500 italic truncate">
+                                "{order.description}"
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Right section - Price & Actions */}
+                        <div className="flex flex-col sm:flex-row lg:flex-col items-end gap-3 lg:min-w-[200px]">
+                          {/* Price */}
+                          <div className="text-right">
+                            <p className="text-xs font-semibold text-slate-400 mb-1">
+                              Tổng tiền
+                            </p>
+                            <p className="text-xl font-black text-emerald-600">
+                              {order.price?.amount
+                                ? formatPrice(order.price.amount)
+                                : "0"}{" "}
+                              đ
+                            </p>
+                          </div>
+
+                          {/* Timeline - Progress tracker */}
+                          <div className="w-full lg:w-auto">
+                            <Timeline order={order} compact={true} />
+                          </div>
+
+                          {/* Action buttons */}
+                          <div className="flex gap-2">
+                            {/* Cancel button */}
+                            {canCancelOrder(order.status) && (
+                              <button
+                                onClick={() => handleCancelBooking(order._id)}
+                                className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded-lg transition-colors duration-200 flex items-center gap-1">
+                                <svg
+                                  className="w-3 h-3"
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20">
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                                Hủy
+                              </button>
+                            )}
+
+                            {/* Details button */}
+                            <button
+                              onClick={() =>
+                                window.open(`/booking/${order._id}`, "_blank")
+                              }
+                              className="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg transition-colors duration-200 flex items-center gap-1">
+                              Chi tiết
                               <svg
-                                className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300"
+                                className="w-3 h-3"
                                 fill="currentColor"
                                 viewBox="0 0 20 20">
                                 <path
@@ -733,15 +922,6 @@ function Profile() {
                         </div>
                       </div>
                     </div>
-
-                    <div
-                      className={`h-2 bg-gradient-to-r ${
-                        order.status === "completed"
-                          ? "from-green-400 to-emerald-500"
-                          : order.status === "pending"
-                          ? "from-yellow-400 to-orange-500"
-                          : "from-red-400 to-pink-500"
-                      } transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500`}></div>
                   </div>
                 ))}
               </div>

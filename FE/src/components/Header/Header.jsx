@@ -12,6 +12,12 @@ import {
   FiUser,
   FiSettings,
   FiLogOut,
+  FiMoreHorizontal,
+  FiInfo,
+  FiMail,
+  FiEdit3,
+  FiUserPlus,
+  FiChevronDown,
 } from "react-icons/fi";
 import { FaTools, FaUserCircle } from "react-icons/fa";
 import BookingModal from "../BookingModal/BookingModal";
@@ -82,7 +88,62 @@ function Header() {
     setServices(res.data.data);
   };
 
-  const navItems = [
+  // Main navigation items (reduced for cleaner look)
+  const mainNavItems = [
+    { name: "Trang chủ", href: "/" },
+    { name: "Dịch vụ", href: "/services" },
+    { name: "Đặt lịch", href: "/booking", highlight: true },
+  ];
+
+  // Secondary items for dropdown menu
+  const moreMenuItems = [
+    {
+      key: "about",
+      label: (
+        <Link to="/about" className="flex items-center gap-3 px-3 py-2">
+          <FiInfo className="text-gray-600" />
+          <span>Giới thiệu</span>
+        </Link>
+      ),
+    },
+    {
+      key: "contact",
+      label: (
+        <Link to="/contact" className="flex items-center gap-3 px-3 py-2">
+          <FiMail className="text-gray-600" />
+          <span>Liên hệ</span>
+        </Link>
+      ),
+    },
+    {
+      key: "blog",
+      label: (
+        <Link to="/blog" className="flex items-center gap-3 px-3 py-2">
+          <FiEdit3 className="text-gray-600" />
+          <span>Tin tức</span>
+        </Link>
+      ),
+    },
+    {
+      type: "divider",
+    },
+    {
+      key: "register-technician",
+      label: (
+        <Link
+          to="/register-technician"
+          className="flex items-center gap-3 px-3 py-2">
+          <FiUserPlus className="text-blue-600" />
+          <span className="text-blue-600 font-medium">
+            Đăng ký kỹ thuật viên
+          </span>
+        </Link>
+      ),
+    },
+  ];
+
+  // All items for mobile menu (keep original structure)
+  const allNavItems = [
     { name: "Trang chủ", href: "/" },
     { name: "Dịch vụ", href: "/services" },
     { name: "Đặt lịch", href: "/booking", highlight: true },
@@ -97,7 +158,7 @@ function Header() {
     window.location.href = "/login";
   };
 
-  const items = [
+  const userMenuItems = [
     {
       key: "1",
       label: (
@@ -227,7 +288,7 @@ function Header() {
 
             {/* Navigation Menu - Modern & Clean */}
             <nav className="hidden lg:flex items-center space-x-2">
-              {navItems.map((item) => {
+              {mainNavItems.map((item) => {
                 const isActive = location.pathname === item.href;
                 return (
                   <Link
@@ -256,6 +317,19 @@ function Header() {
                   </Link>
                 );
               })}
+
+              {/* More Menu Dropdown */}
+              <Dropdown
+                menu={{ items: moreMenuItems }}
+                trigger={["hover"]}
+                placement="bottomCenter">
+                <button className="relative px-5 py-3 text-base font-semibold rounded-full transition-all duration-300 group whitespace-nowrap text-slate-700 hover:text-blue-600 hover:bg-blue-50/80">
+                  <div className="flex items-center gap-2">
+                    <span>Về Chúng Tôi</span>
+                    <FiChevronDown className="w-4 h-4" />
+                  </div>
+                </button>
+              </Dropdown>
             </nav>
 
             {/* Right Section - Enhanced */}
@@ -306,7 +380,7 @@ function Header() {
               <div className="hidden lg:flex items-center space-x-3">
                 {userData ? (
                   <Dropdown
-                    menu={{ items }}
+                    menu={{ items: userMenuItems }}
                     trigger={["click"]}
                     placement="bottomRight">
                     <div className="cursor-pointer group">
@@ -363,91 +437,111 @@ function Header() {
 
         {/* Menu Panel */}
         <div
-          className={`absolute right-0 top-0 h-full w-80 bg-white shadow-2xl transform transition-transform duration-300 ${
+          className={`absolute right-0 top-0 h-full w-80 bg-white shadow-2xl transform transition-transform duration-300 overflow-y-auto ${
             isMenuOpen ? "translate-x-0" : "translate-x-full"
           }`}>
-          <div className="p-6">
-            {/* Close button */}
-            <button
-              onClick={() => setIsMenuOpen(false)}
-              className="absolute top-4 right-4 p-2 text-gray-600 hover:text-gray-800 rounded-lg hover:bg-gray-100">
-              <FiX className="w-6 h-6" />
-            </button>
+          <div className="flex flex-col h-full">
+            {/* Header Section */}
+            <div className="flex-shrink-0 p-6 border-b border-gray-100">
+              {/* Close button */}
+              <button
+                onClick={() => setIsMenuOpen(false)}
+                className="absolute top-4 right-4 p-2 text-gray-600 hover:text-gray-800 rounded-lg hover:bg-gray-100">
+                <FiX className="w-6 h-6" />
+              </button>
 
-            {/* Mobile Navigation */}
-            <nav className="mt-8 space-y-2">
-              {navItems.map((item) => {
-                const isActive = location.pathname === item.href;
-                return (
-                  <Link
-                    key={item.name}
-                    to={item.href}
-                    className={`
-                      block px-4 py-3 rounded-lg font-medium transition-all duration-200
-                      ${
-                        isActive
-                          ? "bg-blue-50 text-blue-600"
-                          : "text-gray-700 hover:bg-gray-50 hover:text-blue-600"
-                      }
-                      ${item.highlight ? "relative" : ""}
-                    `}
-                    onClick={() => setIsMenuOpen(false)}>
-                    {item.name}
-                    {item.highlight && (
-                      <span className="absolute top-3 right-4 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                    )}
-                  </Link>
-                );
-              })}
-            </nav>
-
-            {/* Mobile Actions */}
-            <div className="mt-8 space-y-3">
-              {userData ? (
-                <div className="relative">
-                  <Dropdown
-                    menu={{ items }}
-                    trigger={["click"]}
-                    placement="bottomLeft"
-                    overlayClassName="mobile-dropdown"
-                    getPopupContainer={(trigger) => trigger.parentNode}>
-                    <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-                      <Avatar
-                        size={40}
-                        src={userData.avatar}
-                        className="border-2 border-blue-100"
-                      />
-                      <span className="text-sm font-medium text-gray-700">
-                        {userData.fullName}
-                      </span>
-                    </div>
-                  </Dropdown>
-                </div>
-              ) : (
-                <Link
-                  to="/login"
-                  className="w-full flex items-center justify-center px-4 py-3 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                  <FaUserCircle className="mr-2 text-lg" />
-                  Đăng nhập
-                </Link>
-              )}
-              <Link
-                to="/register"
-                className="w-full px-4 py-3 text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 font-medium flex items-center justify-center">
-                Đăng ký tài khoản
-              </Link>
+              {/* Logo or Title */}
+              <h3 className="text-lg font-semibold text-gray-800 mt-2">Menu</h3>
             </div>
 
-            {/* Contact Info */}
-            <div className="mt-8 pt-8 border-t border-gray-200 space-y-3 text-sm text-gray-600">
-              <p className="flex items-center">
-                <FiPhone className="mr-2" />
-                Hotline: 1900 xxxx
-              </p>
-              <p className="flex items-center">
-                <FiClock className="mr-2" />
-                8:00 - 20:00 (T2 - CN)
-              </p>
+            {/* Navigation Section */}
+            <div className="flex-grow p-6 overflow-y-auto">
+              <nav className="space-y-2">
+                {allNavItems.map((item) => {
+                  const isActive = location.pathname === item.href;
+                  return (
+                    <Link
+                      key={item.name}
+                      to={item.href}
+                      className={`
+                        block px-4 py-3 rounded-lg font-medium transition-all duration-200
+                        ${
+                          isActive
+                            ? "bg-blue-50 text-blue-600"
+                            : "text-gray-700 hover:bg-gray-50 hover:text-blue-600"
+                        }
+                        ${item.highlight ? "relative" : ""}
+                      `}
+                      onClick={() => setIsMenuOpen(false)}>
+                      {item.name}
+                      {item.highlight && (
+                        <span className="absolute top-3 right-4 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+
+            {/* Actions Section - Fixed at bottom */}
+            <div className="flex-shrink-0 p-6 border-t border-gray-100 bg-gray-50">
+              {/* Mobile Actions */}
+              <div className="space-y-3">
+                {userData ? (
+                  <div className="relative">
+                    <Dropdown
+                      menu={{ items: userMenuItems }}
+                      trigger={["click"]}
+                      placement="bottomLeft"
+                      overlayClassName="mobile-dropdown"
+                      getPopupContainer={(trigger) => trigger.parentNode}>
+                      <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors bg-white border border-gray-200">
+                        <Avatar
+                          size={40}
+                          src={userData.avatar}
+                          className="border-2 border-blue-100"
+                        />
+                        <div className="flex-grow">
+                          <span className="text-sm font-medium text-gray-700 block">
+                            {userData.fullName}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            Nhấn để xem menu
+                          </span>
+                        </div>
+                      </div>
+                    </Dropdown>
+                  </div>
+                ) : (
+                  <>
+                    <Link
+                      to="/login"
+                      className="w-full flex items-center justify-center px-4 py-3 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors bg-white"
+                      onClick={() => setIsMenuOpen(false)}>
+                      <FaUserCircle className="mr-2 text-lg" />
+                      Đăng nhập
+                    </Link>
+                    <Link
+                      to="/register"
+                      className="w-full px-4 py-3 text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 font-medium flex items-center justify-center"
+                      onClick={() => setIsMenuOpen(false)}>
+                      Đăng ký tài khoản
+                    </Link>
+                  </>
+                )}
+              </div>
+
+              {/* Contact Info */}
+              <div className="mt-4 pt-4 border-t border-gray-200 space-y-3 text-sm text-gray-600">
+                <p className="flex items-center">
+                  <FiPhone className="mr-2" />
+                  Hotline: 1900 xxxx
+                </p>
+                <p className="flex items-center">
+                  <FiClock className="mr-2" />
+                  8:00 - 20:00 (T2 - CN)
+                </p>
+              </div>
             </div>
           </div>
         </div>

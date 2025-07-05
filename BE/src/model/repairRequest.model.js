@@ -2,6 +2,11 @@ const mongoose = require("mongoose");
 
 const repairRequestSchema = new mongoose.Schema(
   {
+    orderCode: {
+      type: String,
+      unique: true,
+      required: true,
+    },
     customer: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Account",
@@ -9,7 +14,7 @@ const repairRequestSchema = new mongoose.Schema(
     },
     technician: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Account",
+      ref: "Technician",
     },
     service: {
       type: mongoose.Schema.Types.ObjectId,
@@ -26,6 +31,7 @@ const repairRequestSchema = new mongoose.Schema(
       type: String,
       enum: [
         "pending",
+        "pending_confirmation",
         "accepted",
         "in_progress",
         "completed",
@@ -95,6 +101,15 @@ const repairRequestSchema = new mongoose.Schema(
       reason: String,
       fee: Number,
       cancelledAt: Date,
+    },
+    confirmationTimeout: {
+      type: Date,
+    },
+    confirmationAssignedAt: {
+      type: Date,
+    },
+    rejectionReason: {
+      type: String,
     },
   },
   {

@@ -33,10 +33,17 @@ const accountRouter = require("./src/routers/account.router");
 const blogRouter = require("./src/routers/blog.router");
 const adminRouter = require("./src/routers/admin.router");
 const contactRouter = require("./src/routers/contact.router");
+const bookingRouter = require("./src/routers/booking.router");
 app.use("/api/account", accountRouter);
 app.use("/api/blogs", blogRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/contact", contactRouter);
+app.use("/api/booking", bookingRouter);
+
+// Start scheduler for timeout management
+const { startScheduler } = require("./src/services/scheduler");
+startScheduler();
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });

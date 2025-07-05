@@ -164,44 +164,6 @@ function Home() {
     },
   ];
 
-  const pricingPlans = [
-    {
-      name: "Gói Cơ bản",
-      price: "Theo dịch vụ",
-      features: [
-        "Kiểm tra miễn phí",
-        "Báo giá trước khi làm",
-        "Bảo hành 3 tháng",
-        "Thanh toán sau dịch vụ",
-      ],
-      recommended: false,
-    },
-    {
-      name: "Gói Gia đình",
-      price: "2.999.000đ/năm",
-      features: [
-        "Bảo trì định kỳ 4 lần/năm",
-        "Giảm 20% phí sửa chữa",
-        "Ưu tiên phục vụ",
-        "Bảo hành 6 tháng",
-        "Hotline riêng 24/7",
-      ],
-      recommended: true,
-    },
-    {
-      name: "Gói Doanh nghiệp",
-      price: "Liên hệ",
-      features: [
-        "Bảo trì theo hợp đồng",
-        "Giảm 30% phí sửa chữa",
-        "Phục vụ ưu tiên cao",
-        "Bảo hành 12 tháng",
-        "Quản lý riêng",
-      ],
-      recommended: false,
-    },
-  ];
-
   const blogPosts = [
     {
       id: 1,
@@ -680,67 +642,6 @@ function Home() {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing Plans Section */}
-      <section className="py-16 sm:py-20 bg-gradient-to-b from-white to-blue-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16" data-aos="fade-up">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700">
-              Gói dịch vụ phù hợp với bạn
-            </h2>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Lựa chọn gói dịch vụ phù hợp với nhu cầu của gia đình hoặc doanh
-              nghiệp
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
-            {pricingPlans.map((plan, index) => (
-              <div
-                key={index}
-                className={`relative bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 p-8 ${
-                  plan.recommended
-                    ? "ring-2 ring-blue-600 transform scale-105"
-                    : ""
-                }`}
-                data-aos="fade-up"
-                data-aos-delay={index * 100}>
-                {plan.recommended && (
-                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                    <span className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-1 rounded-full text-sm font-medium shadow-md">
-                      Phổ biến nhất
-                    </span>
-                  </div>
-                )}
-                <div className="text-center mb-6 sm:mb-8">
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                    {plan.name}
-                  </h3>
-                  <p className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
-                    {plan.price}
-                  </p>
-                </div>
-                <ul className="space-y-4 mb-8">
-                  {plan.features.map((feature, idx) => (
-                    <li key={idx} className="flex items-start gap-3">
-                      <FiCheckCircle className="text-emerald-500 mt-0.5 flex-shrink-0" />
-                      <span className="text-gray-700">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  className={`w-full py-3 rounded-lg font-medium transition-all duration-300 hover:scale-105 ${
-                    plan.recommended
-                      ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
-                      : "bg-gray-100 text-gray-900 hover:bg-gray-200"
-                  }`}>
-                  Chọn gói này
-                </button>
-              </div>
-            ))}
           </div>
         </div>
       </section>

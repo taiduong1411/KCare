@@ -45,7 +45,7 @@ const TechnicianSchema = new Schema(
     },
     depositStatus: {
       type: String,
-      enum: ["pending", "paid", "active", "suspended"],
+      enum: ["pending", "paid"],
       default: "pending",
     },
     depositPaidAt: { type: Date },

@@ -4,6 +4,7 @@ const Service = require("../model/service.model");
 const Contact = require("../model/contact.model");
 const services = require("../services/email");
 const Technician = require("../model/technician.model");
+const bcrypt = require("bcrypt");
 const AdminController = {
   createService: async (req, res) => {
     const {
@@ -176,7 +177,11 @@ const AdminController = {
 
       const technician = await Technician.findByIdAndUpdate(
         id,
-        { status: "active" },
+        {
+          status: "active",
+          depositStatus: "paid", // Tự động đặt đã đóng cọc khi admin phê duyệt
+          depositPaidAt: new Date(), // Ghi lại thời gian phê duyệt
+        },
         { new: true }
       ).populate("account", "email fullName");
 
@@ -198,7 +203,7 @@ const AdminController = {
         if (technician.account && technician.account.email) {
           await services.confirmTechnician(
             "Đăng ký Kỹ thuật viên được chấp thuận",
-            `Chúc mừng! Hồ sơ kỹ thuật viên của bạn đã được duyệt thành công. Bạn có thể bắt đầu nhận đơn hàng từ hôm nay.`,
+            `Chúc mừng! Hồ sơ kỹ thuật viên của bạn đã được duyệt thành công và đã được xử lý ký quỹ. Bạn có thể bắt đầu nhận đơn hàng ngay lập tức!`,
             technician.account.email
           );
         }
@@ -368,7 +373,11 @@ const AdminController = {
 
       const technician = await Technician.findByIdAndUpdate(
         id,
-        { status: "active" },
+        {
+          status: "active",
+          depositStatus: "paid", // Tự động đặt đã đóng cọc khi kích hoạt
+          depositPaidAt: new Date(), // Ghi lại thời gian kích hoạt
+        },
         { new: true }
       ).populate("account", "email fullName");
 
@@ -407,7 +416,11 @@ const AdminController = {
 
       const technician = await Technician.findByIdAndUpdate(
         id,
-        { status: "active" },
+        {
+          status: "active",
+          depositStatus: "paid", // Tự động đặt đã đóng cọc khi bỏ cấm
+          depositPaidAt: new Date(), // Ghi lại thời gian bỏ cấm
+        },
         { new: true }
       ).populate("account", "email fullName");
 
@@ -510,19 +523,15 @@ const AdminController = {
         // Sử dụng tài khoản hiện có
         accountId = existingAccount._id;
 
-        // Cập nhật thông tin account
-        await Accounts.findByIdAndUpdate(
-          accountId,
-          {
-            role: "technician",
-            password: password, // Reset password về abc123
-            fullName: fullName, // Cập nhật fullName mới
-            email: email, // Cập nhật email mới (nếu khác)
-            phone: phone, // Cập nhật phone mới (nếu khác)
-            address: address, // Cập nhật address mới
-          },
-          { new: true }
-        );
+        // Cập nhật thông tin account (sử dụng .save() để trigger pre-save middleware)
+        const accountToUpdate = await Accounts.findById(accountId);
+        accountToUpdate.role = "technician";
+        accountToUpdate.password = password; // Sẽ được hash bởi pre-save middleware
+        accountToUpdate.fullName = fullName;
+        accountToUpdate.email = email;
+        accountToUpdate.phone = phone;
+        accountToUpdate.address = address;
+        await accountToUpdate.save();
       } else {
         // Tạo tài khoản mới nếu chưa tồn tại với password mặc định
         const newAccount = new Accounts({
@@ -566,9 +575,10 @@ const AdminController = {
         // Account reference
         account: accountId,
 
-        // Admin tạo thì tự động active và deposit pending
+        // Admin tạo thì tự động active và đã đóng cọc
         status: "active",
-        depositStatus: "pending",
+        depositStatus: "paid", // Tự động đặt đã đóng cọc khi admin tạo
+        depositPaidAt: new Date(), // Ghi lại thời gian tạo
         depositAmount: 1000000, // 1 triệu VNĐ
 
         // Default values
@@ -597,28 +607,21 @@ const AdminController = {
             ⚠️ QUAN TRỌNG: Vui lòng đổi mật khẩu ngay sau khi đăng nhập lần đầu để bảo mật tài khoản.
 
             ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            💰 THÔNG TIN ĐẶT CỌC
+            ✅ TRẠNG THÁI TÀI KHOẢN
             ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-            Để hoàn tất quy trình và bắt đầu nhận đơn hàng, bạn cần nộp khoản đặt cọc:
-
-            Số tiền: 1.000.000 VNĐ
-            Ngân hàng: Vietcombank
-            Số tài khoản: 1034567890
-            Chủ tài khoản: CONG TY K-CARE
-            Nội dung chuyển khoản: KYQUY ${fullName} ${email}
-
-            📱 Sau khi chuyển khoản, vui lòng chụp ảnh bill và gửi qua email hoặc liên hệ hotline để xác nhận.
+            🎯 Trạng thái: HOẠT ĐỘNG
+            💰 Ký quỹ: ĐÃ XỬ LÝ
+            🚀 Bạn có thể bắt đầu nhận đơn hàng ngay lập tức!
 
             ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             🎯 BƯỚC TIẾP THEO
             ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
             1. Đăng nhập vào hệ thống
-            2. Đổi mật khẩu
+            2. Đổi mật khẩu mới
             3. Hoàn thiện hồ sơ cá nhân
-            4. Nộp đặt cọc
-            5. Bắt đầu nhận đơn hàng
+            4. Bắt đầu nhận đơn hàng
 
             Chúc bạn thành công và kiếm được thu nhập cao cùng K-Care!
 
