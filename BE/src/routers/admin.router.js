@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const AdminController = require("../controllers/admin.controller");
+const BookingController = require("../controllers/booking.controller");
 const adminAuth = require("../middleware/adminAuth");
 
 // Service
@@ -13,6 +14,7 @@ router.delete("/delete-service/:id", adminAuth, AdminController.deleteService);
 router.post("/reply-customer-email", adminAuth, AdminController.replyCustomer);
 // technician
 router.get("/get-all-technicians", AdminController.getAllTechnicians);
+router.get("/get-active-technicians", AdminController.getActiveTechnicians);
 router.get(
   "/get-technician-by-id/:id",
   adminAuth,
@@ -51,5 +53,23 @@ router.put(
   AdminController.activateTechnician
 );
 router.put("/unban-technician/:id", adminAuth, AdminController.unbanTechnician);
+
+// Complaint Management
+router.get("/complaints", adminAuth, BookingController.getAllComplaints);
+router.put(
+  "/complaints/:bookingId/review",
+  adminAuth,
+  BookingController.reviewComplaint
+);
+router.get(
+  "/technicians/available-for-warranty",
+  adminAuth,
+  BookingController.getAvailableTechniciansForWarranty
+);
+router.get(
+  "/technicians/complaint-stats",
+  adminAuth,
+  BookingController.getTechnicianComplaintStats
+);
 
 module.exports = router;

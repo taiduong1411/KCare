@@ -30,9 +30,13 @@ const Timeline = ({ order, compact = false }) => {
         description: "Kỹ thuật viên đã nhận việc",
         icon: FiUser,
         color: "yellow",
-        completed: ["accepted", "in_progress", "completed"].includes(
-          order.status
-        ),
+        completed: [
+          "accepted",
+          "in_progress",
+          "completed",
+          "warranty_requested",
+          "warranty_completed",
+        ].includes(order.status),
       },
       {
         id: "in_progress",
@@ -40,7 +44,26 @@ const Timeline = ({ order, compact = false }) => {
         description: "Kỹ thuật viên đang làm việc",
         icon: FiTool,
         color: "purple",
-        completed: ["in_progress", "completed"].includes(order.status),
+        completed: [
+          "in_progress",
+          "pending_customer_confirmation",
+          "completed",
+          "warranty_requested",
+          "warranty_completed",
+        ].includes(order.status),
+      },
+      {
+        id: "pending_customer_confirmation",
+        title: "Chờ xác nhận",
+        description: "Chờ khách hàng xác nhận hoàn thành",
+        icon: FiAlertCircle,
+        color: "amber",
+        completed: [
+          "pending_customer_confirmation",
+          "completed",
+          "warranty_requested",
+          "warranty_completed",
+        ].includes(order.status),
       },
       {
         id: "completed",
@@ -48,7 +71,11 @@ const Timeline = ({ order, compact = false }) => {
         description: "Dịch vụ đã được hoàn thành",
         icon: FiCheck,
         color: "green",
-        completed: order.status === "completed",
+        completed: [
+          "completed",
+          "warranty_requested",
+          "warranty_completed",
+        ].includes(order.status),
       },
     ];
 
@@ -67,6 +94,23 @@ const Timeline = ({ order, compact = false }) => {
       ];
     }
 
+    if (order.status === "pending_admin_review") {
+      return [
+        baseSteps[0],
+        baseSteps[1],
+        baseSteps[2],
+        baseSteps[3],
+        {
+          id: "pending_admin_review",
+          title: "Chờ admin duyệt",
+          description: "Khiếu nại đang được xem xét",
+          icon: FiClock,
+          color: "orange",
+          completed: true,
+        },
+      ];
+    }
+
     if (order.status === "warranty_requested") {
       return [
         ...baseSteps,
@@ -76,6 +120,36 @@ const Timeline = ({ order, compact = false }) => {
           description: "Đang xử lý yêu cầu bảo hành",
           icon: FiAlertCircle,
           color: "orange",
+          completed: true,
+        },
+        {
+          id: "warranty_completed",
+          title: "Hoàn thành bảo hành",
+          description: "Chờ kỹ thuật viên hoàn thành bảo hành",
+          icon: FiStar,
+          color: "green",
+          completed: false,
+        },
+      ];
+    }
+
+    if (order.status === "warranty_completed") {
+      return [
+        ...baseSteps,
+        {
+          id: "warranty",
+          title: "Yêu cầu bảo hành",
+          description: "Đang xử lý yêu cầu bảo hành",
+          icon: FiAlertCircle,
+          color: "orange",
+          completed: true,
+        },
+        {
+          id: "warranty_completed",
+          title: "Hoàn thành bảo hành",
+          description: "Chờ xác nhận bảo hành",
+          icon: FiStar,
+          color: "green",
           completed: true,
         },
       ];
@@ -107,6 +181,9 @@ const Timeline = ({ order, compact = false }) => {
       orange: step.completed
         ? "bg-orange-500 text-white"
         : "bg-orange-100 text-orange-600",
+      amber: step.completed
+        ? "bg-amber-500 text-white"
+        : "bg-amber-100 text-amber-600",
     };
     return colors[step.color] || colors.blue;
   };
@@ -164,9 +241,15 @@ const Timeline = ({ order, compact = false }) => {
             {order.status === "pending" && "Đang chờ xác nhận"}
             {order.status === "accepted" && "Kỹ thuật viên sẽ đến đúng giờ"}
             {order.status === "in_progress" && "Đang thực hiện dịch vụ"}
+            {order.status === "pending_customer_confirmation" &&
+              "Chờ bạn xác nhận hoàn thành"}
             {order.status === "completed" && "Dịch vụ đã hoàn thành"}
+            {order.status === "pending_admin_review" &&
+              "Chờ admin duyệt khiếu nại"}
             {order.status === "cancelled" && "Đơn hàng đã hủy"}
             {order.status === "warranty_requested" && "Đang xử lý bảo hành"}
+            {order.status === "warranty_completed" &&
+              "Chờ bạn xác nhận bảo hành"}
           </span>
         </div>
       </div>

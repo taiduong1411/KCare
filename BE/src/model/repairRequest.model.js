@@ -34,10 +34,14 @@ const repairRequestSchema = new mongoose.Schema(
         "pending_confirmation",
         "accepted",
         "in_progress",
+        "pending_customer_confirmation",
         "completed",
+        "complaint",
+        "pending_admin_review",
+        "warranty_requested",
+        "warranty_completed",
         "cancelled",
         "cancelled_with_fee",
-        "warranty_requested",
       ],
       default: "pending",
     },
@@ -110,6 +114,47 @@ const repairRequestSchema = new mongoose.Schema(
     },
     rejectionReason: {
       type: String,
+    },
+    customerConfirmation: {
+      confirmedAt: Date,
+      satisfied: Boolean,
+      complaintReason: String,
+      complaintDescription: String,
+      confirmationTimeout: Date,
+      confirmationAssignedAt: Date,
+    },
+    adminReview: {
+      reviewedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Account",
+      },
+      reviewedAt: Date,
+      decision: {
+        type: String,
+        enum: ["approved", "rejected"],
+      },
+      reason: String,
+      assignedTechnician: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Technician",
+      },
+    },
+    warrantyWork: {
+      completedAt: Date,
+      workDescription: String,
+      partsUsed: [String],
+      notes: String,
+    },
+    warrantyConfirmation: {
+      confirmedAt: Date,
+      satisfied: Boolean,
+      rating: Number,
+      comment: String,
+    },
+    warrantyComplaint: {
+      complainedAt: Date,
+      reason: String,
+      description: String,
     },
   },
   {

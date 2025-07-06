@@ -70,10 +70,30 @@ const TechnicianSchema = new Schema(
       min: 0,
       max: 5,
     },
+    completedJobs: {
+      type: Number,
+      default: 0,
+    },
+    complaintCount: {
+      type: Number,
+      default: 0,
+    },
     status: {
       type: String,
       enum: ["pending", "active", "suspended", "banned"],
       default: "pending",
+    },
+    lockInfo: {
+      isLocked: {
+        type: Boolean,
+        default: false,
+      },
+      lockReason: String,
+      lockedAt: Date,
+      lockedBy: {
+        type: Schema.Types.ObjectId,
+        ref: "Account",
+      },
     },
   },
   {

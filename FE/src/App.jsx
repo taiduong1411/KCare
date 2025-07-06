@@ -25,6 +25,7 @@ import Blog from "./pages/User/Blog/Blog";
 import BlogDetail from "./pages/User/Blog/BlogDetail";
 import BlogByTag from "./pages/User/Blog/BlogbyTag";
 import ContactAdmin from "./pages/Admin/Contact/Contact";
+import Complaints from "./pages/Admin/Complaints/Complaints";
 import DashboardTechnician from "./pages/Technician/Dashboard/Dashboard";
 import RequestRepair from "./pages/Technician/RequestRepair/RequestRepair";
 import TechnicianOrders from "./pages/Technician/Orders/Orders";
@@ -58,6 +59,7 @@ function App() {
         <Route path="/admin/orders" element={<RepairOrders />} />
         <Route path="/admin/blog" element={<AdminBlog />} />
         <Route path="/admin/customer-contact" element={<ContactAdmin />} />
+        <Route path="/admin/complaints" element={<Complaints />} />
       </Route>
       {/* Technician */}
       <Route exact path="/" element={<TechRoute />}>

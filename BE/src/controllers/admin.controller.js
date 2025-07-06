@@ -88,6 +88,26 @@ const AdminController = {
       .populate("account", "avatar");
     return res.status(200).json(technicians);
   },
+  getActiveTechnicians: async (req, res) => {
+    try {
+      const technicians = await Technician.find({
+        status: "active",
+        depositStatus: "paid",
+        "lockInfo.isLocked": { $ne: true },
+      })
+        .populate("services", "name category")
+        .populate("account", "avatar fullName phone")
+        .sort({ rating: -1, completedJobs: -1 });
+
+      return res.status(200).json(technicians);
+    } catch (error) {
+      console.error("Error getting active technicians:", error);
+      return res.status(500).json({
+        msg: "Có lỗi xảy ra khi lấy danh sách kỹ thuật viên",
+        error: error.message,
+      });
+    }
+  },
   getTechnicianById: async (req, res) => {
     const { id } = req.params;
     const technician = await Technician.findById(id);

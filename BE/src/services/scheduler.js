@@ -107,8 +107,8 @@ const reassignTechnician = async (booking) => {
   }
 };
 
-// Function để kiểm tra và xử lý timeout
-const checkTimeouts = async () => {
+// Function để kiểm tra và xử lý technician timeout
+const checkTechnicianTimeouts = async () => {
   try {
     const now = new Date();
 
@@ -128,7 +128,7 @@ const checkTimeouts = async () => {
 
     if (expiredBookings.length > 0) {
       console.log(
-        `⏰ [Scheduler] Found ${expiredBookings.length} expired confirmations`
+        `⏰ [Scheduler] Found ${expiredBookings.length} expired technician confirmations`
       );
 
       for (const booking of expiredBookings) {
@@ -158,8 +158,89 @@ const checkTimeouts = async () => {
       }
     }
   } catch (error) {
-    console.error("Error in checkTimeouts:", error);
+    console.error("Error in checkTechnicianTimeouts:", error);
   }
+};
+
+// Function để kiểm tra và xử lý customer confirmation timeout
+const checkCustomerConfirmationTimeouts = async () => {
+  try {
+    const now = new Date();
+
+    // Tìm tất cả booking đang chờ khách hàng xác nhận và đã hết timeout
+    const expiredOrders = await RepairRequest.find({
+      status: "pending_customer_confirmation",
+      "customerConfirmation.confirmationTimeout": { $lt: now },
+    })
+      .populate("customer", "fullName email phone")
+      .populate("service", "name description commissionRate")
+      .populate({
+        path: "technician",
+        populate: {
+          path: "account",
+          select: "fullName phone",
+        },
+      });
+
+    if (expiredOrders.length > 0) {
+      console.log(
+        `⏰ [Scheduler] Found ${expiredOrders.length} expired customer confirmations`
+      );
+
+      for (const booking of expiredOrders) {
+        try {
+          console.log(
+            `⏰ [Scheduler] Auto-completing booking ${booking.orderCode} due to customer timeout`
+          );
+
+          // Auto-complete the order
+          booking.status = "completed";
+          booking.payment.status = "pending";
+
+          // Mark commission as eligible
+          booking.commission.status = "eligible";
+
+          // Update customer confirmation
+          booking.customerConfirmation.satisfied = true;
+          booking.customerConfirmation.confirmedAt = new Date();
+
+          // Add automatic completion to timeline
+          booking.timeline.push({
+            status: "completed",
+            description: `Đơn hàng được tự động hoàn thành do khách hàng không xác nhận trong thời hạn 2 phút`,
+            createdAt: new Date(),
+          });
+
+          await booking.save();
+
+          // Update technician stats
+          await Technician.findByIdAndUpdate(booking.technician._id, {
+            $inc: {
+              completedJobs: 1,
+              totalEarnings: booking.commission.amount,
+            },
+          });
+
+          console.log(
+            `✅ [Scheduler] Auto-completed order ${booking.orderCode} due to customer confirmation timeout`
+          );
+        } catch (error) {
+          console.error(
+            `❌ [Scheduler] Error auto-completing order ${booking.orderCode}:`,
+            error
+          );
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error in checkCustomerConfirmationTimeouts:", error);
+  }
+};
+
+// Combined function để kiểm tra tất cả timeout
+const checkTimeouts = async () => {
+  await checkTechnicianTimeouts();
+  await checkCustomerConfirmationTimeouts();
 };
 
 // Chạy mỗi phút để kiểm tra timeout
@@ -173,4 +254,9 @@ const startScheduler = () => {
   });
 };
 
-module.exports = { startScheduler, checkTimeouts };
+module.exports = {
+  startScheduler,
+  checkTimeouts,
+  checkTechnicianTimeouts,
+  checkCustomerConfirmationTimeouts,
+};

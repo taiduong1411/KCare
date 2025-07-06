@@ -102,6 +102,18 @@ function Profile() {
   // States for orders
   const [loading, setLoading] = useState(false);
 
+  // States for confirmation modal
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState(null);
+  const [confirmationType, setConfirmationType] = useState(null); // 'complete' or 'complaint'
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [complaintReason, setComplaintReason] = useState("");
+  const [complaintDescription, setComplaintDescription] = useState("");
+
+  // States for countdown timer
+  const [countdowns, setCountdowns] = useState({});
+
   const {
     register,
     handleSubmit,
@@ -174,6 +186,56 @@ function Profile() {
     }
   }, [activeTab]);
 
+  // Countdown timer effect for pending customer confirmation orders
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCountdowns((prevCountdowns) => {
+        const newCountdowns = { ...prevCountdowns };
+        let hasChanges = false;
+
+        orders.forEach((order) => {
+          if (
+            order.status === "pending_customer_confirmation" &&
+            order.customerConfirmation?.confirmationTimeout
+          ) {
+            const timeoutDate = new Date(
+              order.customerConfirmation.confirmationTimeout
+            );
+            const now = new Date();
+            const timeLeft = timeoutDate.getTime() - now.getTime();
+
+            if (timeLeft > 0) {
+              const minutes = Math.floor(timeLeft / (1000 * 60));
+              const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
+              newCountdowns[order._id] = `${minutes}:${seconds
+                .toString()
+                .padStart(2, "0")}`;
+              hasChanges = true;
+            } else {
+              // Timeout expired, remove countdown and potentially refresh orders
+              if (newCountdowns[order._id]) {
+                delete newCountdowns[order._id];
+                hasChanges = true;
+                // Refresh orders to get updated status
+                setTimeout(() => fetchOrders(), 1000);
+              }
+            }
+          } else {
+            // Remove countdown for orders not in pending_customer_confirmation
+            if (newCountdowns[order._id]) {
+              delete newCountdowns[order._id];
+              hasChanges = true;
+            }
+          }
+        });
+
+        return hasChanges ? newCountdowns : prevCountdowns;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [orders]);
+
   const fetchOrders = async () => {
     try {
       setLoading(true);
@@ -220,22 +282,174 @@ function Profile() {
     return ["pending", "accepted"].includes(status);
   };
 
+  // Check if order needs customer confirmation
+  const needsCustomerConfirmation = (status) => {
+    return status === "pending_customer_confirmation";
+  };
+
+  // Check if order needs warranty confirmation
+  const needsWarrantyConfirmation = (status) => {
+    return status === "warranty_completed";
+  };
+
+  // Handle customer confirmation
+  const handleConfirmOrder = (orderId, type) => {
+    setSelectedOrderId(orderId);
+    setConfirmationType(type);
+    setShowConfirmModal(true);
+    // Reset form
+    setRating(5);
+    setComment("");
+    setComplaintReason("");
+    setComplaintDescription("");
+  };
+
+  // Check if order has complaint or pending admin review
+  const hasComplaint = (status) => {
+    return status === "pending_admin_review" || status === "warranty_requested";
+  };
+
+  const handleSubmitConfirmation = async () => {
+    if (!selectedOrderId) return;
+
+    try {
+      setLoading(true);
+
+      if (confirmationType === "complete") {
+        // Customer confirms completion
+        const response = await putItems(
+          `/booking/${selectedOrderId}/confirm-completion`,
+          {
+            rating,
+            comment,
+          }
+        );
+
+        if (response.status === 200) {
+          showNotification("success", "Xác nhận hoàn thành thành công!");
+        } else {
+          showNotification("error", response.data?.message || "Có lỗi xảy ra");
+        }
+      } else if (confirmationType === "warranty_complete") {
+        // Customer confirms warranty completion
+        const response = await putItems(
+          `/booking/${selectedOrderId}/confirm-warranty-completion`,
+          {
+            rating,
+            comment,
+          }
+        );
+
+        if (response.status === 200) {
+          showNotification(
+            "success",
+            "Xác nhận bảo hành hoàn thành thành công!"
+          );
+        } else {
+          showNotification("error", response.data?.message || "Có lỗi xảy ra");
+        }
+      } else if (confirmationType === "warranty_complaint") {
+        // Customer reports warranty complaint
+        if (!complaintReason || !complaintDescription) {
+          showNotification("error", "Vui lòng điền đầy đủ thông tin khiếu nại");
+          return;
+        }
+
+        const response = await putItems(
+          `/booking/${selectedOrderId}/report-warranty-complaint`,
+          {
+            reason: complaintReason,
+            description: complaintDescription,
+          }
+        );
+
+        if (response.status === 200) {
+          showNotification("success", "Khiếu nại bảo hành đã được ghi nhận!");
+        } else {
+          showNotification("error", response.data?.message || "Có lỗi xảy ra");
+        }
+      } else if (confirmationType === "cancel_complaint") {
+        // Customer cancels complaint
+        const response = await putItems(
+          `/booking/${selectedOrderId}/cancel-complaint`,
+          {
+            rating,
+            comment,
+          }
+        );
+
+        if (response.status === 200) {
+          showNotification("success", "Hủy khiếu nại thành công!");
+        } else {
+          showNotification("error", response.data?.message || "Có lỗi xảy ra");
+        }
+      } else if (confirmationType === "complaint") {
+        // Customer reports complaint
+        if (!complaintReason || !complaintDescription) {
+          showNotification("error", "Vui lòng điền đầy đủ thông tin khiếu nại");
+          return;
+        }
+
+        const response = await putItems(
+          `/booking/${selectedOrderId}/report-complaint`,
+          {
+            reason: complaintReason,
+            description: complaintDescription,
+          }
+        );
+
+        if (response.status === 200) {
+          showNotification("success", "Khiếu nại đã được ghi nhận!");
+        } else {
+          showNotification("error", response.data?.message || "Có lỗi xảy ra");
+        }
+      }
+
+      // Close modal and refresh orders
+      setShowConfirmModal(false);
+      await fetchOrders();
+    } catch (error) {
+      console.error("Error submitting confirmation:", error);
+      showNotification("error", "Có lỗi xảy ra khi xử lý yêu cầu");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const closeConfirmModal = () => {
+    setShowConfirmModal(false);
+    setSelectedOrderId(null);
+    setConfirmationType(null);
+    setRating(5);
+    setComment("");
+    setComplaintReason("");
+    setComplaintDescription("");
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case "completed":
-        return "bg-gradient-to-r from-green-100 to-emerald-100 text-green-800";
+        return "bg-green-100 text-green-800";
       case "pending":
-        return "bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800";
+        return "bg-blue-100 text-blue-800";
       case "accepted":
-        return "bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-800";
+        return "bg-indigo-100 text-indigo-800";
       case "in_progress":
-        return "bg-gradient-to-r from-purple-100 to-violet-100 text-purple-800";
+        return "bg-yellow-100 text-yellow-800";
+      case "pending_customer_confirmation":
+        return "bg-purple-100 text-purple-800";
+      case "pending_admin_review":
+        return "bg-amber-100 text-amber-800";
+      case "warranty_requested":
+        return "bg-orange-100 text-orange-800";
+      case "warranty_completed":
+        return "bg-cyan-100 text-cyan-800";
       case "cancelled":
-        return "bg-gradient-to-r from-red-100 to-pink-100 text-red-800";
+        return "bg-red-100 text-red-800";
       case "cancelled_with_fee":
-        return "bg-gradient-to-r from-red-100 to-pink-100 text-red-800";
+        return "bg-red-100 text-red-800";
       default:
-        return "bg-gradient-to-r from-slate-100 to-gray-100 text-slate-800";
+        return "bg-gray-100 text-gray-800";
     }
   };
 
@@ -249,6 +463,14 @@ function Profile() {
         return "Đã nhận";
       case "in_progress":
         return "Đang thực hiện";
+      case "pending_customer_confirmation":
+        return "Chờ xác nhận";
+      case "pending_admin_review":
+        return "Chờ admin duyệt";
+      case "warranty_requested":
+        return "Yêu cầu bảo hành";
+      case "warranty_completed":
+        return "Chờ xác nhận bảo hành";
       case "cancelled":
         return "Đã hủy";
       case "cancelled_with_fee":
@@ -723,6 +945,10 @@ function Profile() {
                           ? "bg-gradient-to-r from-yellow-400 to-orange-500"
                           : order.status === "in_progress"
                           ? "bg-gradient-to-r from-purple-400 to-violet-500"
+                          : order.status === "pending_customer_confirmation"
+                          ? "bg-gradient-to-r from-amber-400 to-yellow-500"
+                          : order.status === "complaint"
+                          ? "bg-gradient-to-r from-orange-400 to-red-500"
                           : "bg-gradient-to-r from-red-400 to-pink-500"
                       }`}></div>
 
@@ -756,12 +982,25 @@ function Profile() {
                             </div>
 
                             {/* Status badge */}
-                            <span
-                              className={`px-3 py-1 text-xs font-bold rounded-full ${getStatusColor(
-                                order.status
-                              )}`}>
-                              {getStatusText(order.status)}
-                            </span>
+                            <div className="text-right">
+                              <span
+                                className={`px-3 py-1 text-xs font-bold rounded-full ${getStatusColor(
+                                  order.status
+                                )}`}>
+                                {getStatusText(order.status)}
+                              </span>
+
+                              {/* Countdown timer for pending customer confirmation */}
+                              {order.status ===
+                                "pending_customer_confirmation" &&
+                                countdowns[order._id] && (
+                                  <div className="mt-1">
+                                    <span className="text-xs text-amber-600 font-mono bg-amber-50 px-2 py-1 rounded">
+                                      ⏰ {countdowns[order._id]}
+                                    </span>
+                                  </div>
+                                )}
+                            </div>
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -836,7 +1075,7 @@ function Profile() {
                                       viewBox="0 0 20 20">
                                       <path
                                         fillRule="evenodd"
-                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 002 0V6z"
                                         clipRule="evenodd"
                                       />
                                     </svg>
@@ -880,7 +1119,117 @@ function Profile() {
                           </div>
 
                           {/* Action buttons */}
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap">
+                            {/* Customer confirmation buttons */}
+                            {needsCustomerConfirmation(order.status) && (
+                              <>
+                                <button
+                                  onClick={() =>
+                                    handleConfirmOrder(order._id, "complete")
+                                  }
+                                  className="px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-xs font-semibold rounded-lg transition-colors duration-200 flex items-center gap-1">
+                                  <svg
+                                    className="w-3 h-3"
+                                    fill="currentColor"
+                                    viewBox="0 0 20 20">
+                                    <path
+                                      fillRule="evenodd"
+                                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                      clipRule="evenodd"
+                                    />
+                                  </svg>
+                                  Hoàn thành
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    handleConfirmOrder(order._id, "complaint")
+                                  }
+                                  className="px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg transition-colors duration-200 flex items-center gap-1">
+                                  <svg
+                                    className="w-3 h-3"
+                                    fill="currentColor"
+                                    viewBox="0 0 20 20">
+                                    <path
+                                      fillRule="evenodd"
+                                      d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                      clipRule="evenodd"
+                                    />
+                                  </svg>
+                                  Không vừa ý
+                                </button>
+                              </>
+                            )}
+
+                            {/* Warranty confirmation buttons */}
+                            {needsWarrantyConfirmation(order.status) && (
+                              <>
+                                <button
+                                  onClick={() =>
+                                    handleConfirmOrder(
+                                      order._id,
+                                      "warranty_complete"
+                                    )
+                                  }
+                                  className="px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-xs font-semibold rounded-lg transition-colors duration-200 flex items-center gap-1">
+                                  <svg
+                                    className="w-3 h-3"
+                                    fill="currentColor"
+                                    viewBox="0 0 20 20">
+                                    <path
+                                      fillRule="evenodd"
+                                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                      clipRule="evenodd"
+                                    />
+                                  </svg>
+                                  Hoàn thành
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    handleConfirmOrder(
+                                      order._id,
+                                      "warranty_complaint"
+                                    )
+                                  }
+                                  className="px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg transition-colors duration-200 flex items-center gap-1">
+                                  <svg
+                                    className="w-3 h-3"
+                                    fill="currentColor"
+                                    viewBox="0 0 20 20">
+                                    <path
+                                      fillRule="evenodd"
+                                      d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                      clipRule="evenodd"
+                                    />
+                                  </svg>
+                                  Không hài lòng
+                                </button>
+                              </>
+                            )}
+
+                            {/* Cancel complaint button */}
+                            {hasComplaint(order.status) && (
+                              <button
+                                onClick={() =>
+                                  handleConfirmOrder(
+                                    order._id,
+                                    "cancel_complaint"
+                                  )
+                                }
+                                className="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg transition-colors duration-200 flex items-center gap-1">
+                                <svg
+                                  className="w-3 h-3"
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20">
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                                Hủy khiếu nại
+                              </button>
+                            )}
+
                             {/* Cancel button */}
                             {canCancelOrder(order.status) && (
                               <button
@@ -929,6 +1278,195 @@ function Profile() {
           </div>
         )}
       </div>
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-gray-200">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {confirmationType === "complete"
+                    ? "Xác nhận hoàn thành"
+                    : confirmationType === "warranty_complete"
+                    ? "Xác nhận bảo hành hoàn thành"
+                    : confirmationType === "cancel_complaint"
+                    ? "Hủy khiếu nại"
+                    : confirmationType === "warranty_complaint"
+                    ? "Báo cáo vấn đề bảo hành"
+                    : "Báo cáo vấn đề"}
+                </h2>
+                <button
+                  onClick={closeConfirmModal}
+                  className="text-gray-400 hover:text-gray-600 transition-colors">
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+
+              {confirmationType === "complete" ||
+              confirmationType === "warranty_complete" ||
+              confirmationType === "cancel_complaint" ? (
+                <div className="space-y-4">
+                  <div className="text-center mb-6">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg
+                        className="w-8 h-8 text-green-600"
+                        fill="currentColor"
+                        viewBox="0 0 20 20">
+                        <path
+                          fillRule="evenodd"
+                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                    <p className="text-gray-700">
+                      {confirmationType === "cancel_complaint"
+                        ? "Bạn muốn hủy khiếu nại và xác nhận hoàn thành dịch vụ?"
+                        : confirmationType === "warranty_complete"
+                        ? "Bạn có hài lòng với dịch vụ bảo hành đã được thực hiện không?"
+                        : "Bạn có hài lòng với dịch vụ đã được thực hiện không?"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Đánh giá (1-5 sao)
+                    </label>
+                    <div className="flex gap-2">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          onClick={() => setRating(star)}
+                          className={`w-8 h-8 ${
+                            star <= rating ? "text-yellow-400" : "text-gray-300"
+                          } hover:text-yellow-400 transition-colors`}>
+                          <svg fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                          </svg>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Nhận xét (không bắt buộc)
+                    </label>
+                    <textarea
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      rows="3"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      placeholder="Chia sẻ trải nghiệm của bạn..."
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={closeConfirmModal}
+                      className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                      Hủy
+                    </button>
+                    <button
+                      onClick={handleSubmitConfirmation}
+                      disabled={loading}
+                      className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50">
+                      {loading ? "Đang xử lý..." : "Xác nhận"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="text-center mb-6">
+                    <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg
+                        className="w-8 h-8 text-orange-600"
+                        fill="currentColor"
+                        viewBox="0 0 20 20">
+                        <path
+                          fillRule="evenodd"
+                          d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                    <p className="text-gray-700">
+                      Vui lòng cho chúng tôi biết vấn đề gì đã xảy ra
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Lý do không hài lòng *
+                    </label>
+                    <select
+                      value={complaintReason}
+                      onChange={(e) => setComplaintReason(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                      <option value="">Chọn lý do...</option>
+                      <option value="Chất lượng dịch vụ không đạt">
+                        Chất lượng dịch vụ không đạt
+                      </option>
+                      <option value="Kỹ thuật viên không chuyên nghiệp">
+                        Kỹ thuật viên không chuyên nghiệp
+                      </option>
+                      <option value="Không giải quyết được vấn đề">
+                        Không giải quyết được vấn đề
+                      </option>
+                      <option value="Thái độ phục vụ không tốt">
+                        Thái độ phục vụ không tốt
+                      </option>
+                      <option value="Khác">Khác</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Mô tả chi tiết *
+                    </label>
+                    <textarea
+                      value={complaintDescription}
+                      onChange={(e) => setComplaintDescription(e.target.value)}
+                      rows="4"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      placeholder="Mô tả chi tiết vấn đề bạn gặp phải..."
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={closeConfirmModal}
+                      className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                      Hủy
+                    </button>
+                    <button
+                      onClick={handleSubmitConfirmation}
+                      disabled={
+                        loading || !complaintReason || !complaintDescription
+                      }
+                      className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50">
+                      {loading ? "Đang xử lý..." : "Gửi khiếu nại"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <Footer />
     </div>
   );

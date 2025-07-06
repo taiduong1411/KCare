@@ -20,6 +20,9 @@ router.get(
   BookingController.checkTechnicianAvailability
 );
 
+// Lấy khung giờ trống của kỹ thuật viên
+router.get("/available-slots", BookingController.getAvailableTimeSlots);
+
 // Tra cứu booking theo mã đơn hàng (public API - không cần auth)
 router.get("/search/:orderCode", BookingController.searchByOrderCode);
 
@@ -45,7 +48,33 @@ router.put("/:bookingId/reject", BookingController.rejectOrder);
 router.put("/:bookingId/start", BookingController.startRepair);
 router.put("/:bookingId/complete", BookingController.completeRepair);
 
+// Customer confirmation routes
+router.put(
+  "/:bookingId/confirm-completion",
+  BookingController.confirmCompletion
+);
+router.put("/:bookingId/report-complaint", BookingController.reportComplaint);
+router.put("/:bookingId/cancel-complaint", BookingController.cancelComplaint);
+
+// Warranty routes
+router.put(
+  "/:bookingId/complete-warranty",
+  BookingController.completeWarrantyRepair
+);
+router.put(
+  "/:bookingId/confirm-warranty-completion",
+  BookingController.confirmWarrantyCompletion
+);
+router.put(
+  "/:bookingId/report-warranty-complaint",
+  BookingController.reportWarrantyComplaint
+);
+
 // System maintenance routes
 router.post("/check-timeouts", BookingController.checkTimeouts);
+router.post(
+  "/check-customer-timeouts",
+  BookingController.checkCustomerConfirmationTimeouts
+);
 
 module.exports = router;

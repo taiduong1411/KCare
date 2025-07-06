@@ -61,6 +61,12 @@ const menuItems = [
     title: "Liên hệ khách hàng",
     description: "Quản lý liên hệ",
   },
+  {
+    path: "/admin/complaints",
+    icon: <FiEdit3 className="w-5 h-5" />,
+    title: "Khiếu nại",
+    description: "Xử lý khiếu nại",
+  },
 ];
 
 const Sidebar = () => {

@@ -101,11 +101,11 @@ function BookingModal({ isOpen, onClose, selectedService = null }) {
 
   const getTechnician = async () => {
     try {
-      const res = await getItems("admin/get-all-technicians");
-      console.log("BookingModal technicians:", res.data);
+      const res = await getItems("admin/get-active-technicians");
+      console.log("BookingModal active technicians:", res.data);
       setTechnicians(res.data || []);
     } catch (error) {
-      console.error("Error fetching technicians:", error);
+      console.error("Error fetching active technicians:", error);
       setTechnicians([]);
     }
   };

@@ -98,6 +98,14 @@ const Orders = () => {
           endpoint = `/booking/${orderId}/reject`;
           payload = { reason: modalData.notes };
           break;
+        case "complete_warranty":
+          endpoint = `/booking/${orderId}/complete_warranty`;
+          payload = {
+            notes: modalData.notes,
+            workDescription: modalData.workDescription,
+            partsUsed: modalData.partsUsed,
+          };
+          break;
         default:
           return;
       }
@@ -174,15 +182,23 @@ const Orders = () => {
   const getStatusColor = (status) => {
     switch (status) {
       case "pending":
-        return "bg-yellow-100 text-yellow-800";
+        return "bg-gray-100 text-gray-800";
       case "pending_confirmation":
         return "bg-purple-100 text-purple-800";
       case "accepted":
         return "bg-blue-100 text-blue-800";
       case "in_progress":
         return "bg-orange-100 text-orange-800";
+      case "pending_customer_confirmation":
+        return "bg-amber-100 text-amber-800";
       case "completed":
         return "bg-green-100 text-green-800";
+      case "pending_admin_review":
+        return "bg-orange-100 text-orange-800";
+      case "warranty_requested":
+        return "bg-purple-100 text-purple-800";
+      case "warranty_completed":
+        return "bg-cyan-100 text-cyan-800";
       case "cancelled":
         return "bg-red-100 text-red-800";
       default:
@@ -200,8 +216,16 @@ const Orders = () => {
         return "Đã xác nhận";
       case "in_progress":
         return "Đang sửa chữa";
+      case "pending_customer_confirmation":
+        return "Chờ khách hàng xác nhận";
       case "completed":
         return "Hoàn thành";
+      case "pending_admin_review":
+        return "Chờ admin duyệt";
+      case "warranty_requested":
+        return "Yêu cầu bảo hành";
+      case "warranty_completed":
+        return "Chờ khách hàng xác nhận bảo hành";
       case "cancelled":
         return "Đã hủy";
       default:
@@ -219,8 +243,16 @@ const Orders = () => {
         return <FiCheckCircle className="w-4 h-4" />;
       case "in_progress":
         return <FiPlay className="w-4 h-4" />;
+      case "pending_customer_confirmation":
+        return <FiMessageSquare className="w-4 h-4" />;
       case "completed":
         return <FiCheck className="w-4 h-4" />;
+      case "pending_admin_review":
+        return <FiAlertCircle className="w-4 h-4" />;
+      case "warranty_requested":
+        return <FiTool className="w-4 h-4" />;
+      case "warranty_completed":
+        return <FiMessageSquare className="w-4 h-4" />;
       case "cancelled":
         return <FiX className="w-4 h-4" />;
       default:
@@ -266,6 +298,33 @@ const Orders = () => {
             <FiCheck className="w-4 h-4 inline mr-1" />
             Hoàn thành
           </button>
+        );
+      case "pending_customer_confirmation":
+        return (
+          <span className="text-sm text-gray-500 italic">
+            Chờ khách hàng xác nhận
+          </span>
+        );
+      case "pending_admin_review":
+        return (
+          <span className="text-sm text-orange-500 italic">
+            Chờ admin duyệt khiếu nại
+          </span>
+        );
+      case "warranty_requested":
+        return (
+          <button
+            onClick={() => openModal("complete_warranty", order)}
+            className="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded-md text-sm transition-colors">
+            <FiCheck className="w-4 h-4 inline mr-1" />
+            Hoàn thành bảo hành
+          </button>
+        );
+      case "warranty_completed":
+        return (
+          <span className="text-sm text-cyan-500 italic">
+            Chờ khách hàng xác nhận bảo hành
+          </span>
         );
       default:
         return null;
@@ -353,6 +412,21 @@ const Orders = () => {
               }`}>
               Đang sửa (
               {orders.filter((order) => order.status === "in_progress").length})
+            </button>
+            <button
+              onClick={() => setSelectedStatus("pending_customer_confirmation")}
+              className={`filter-tab ${
+                selectedStatus === "pending_customer_confirmation"
+                  ? "active"
+                  : ""
+              }`}>
+              Chờ KH xác nhận (
+              {
+                orders.filter(
+                  (order) => order.status === "pending_customer_confirmation"
+                ).length
+              }
+              )
             </button>
             <button
               onClick={() => setSelectedStatus("completed")}
@@ -447,6 +521,7 @@ const Orders = () => {
                     {modalType === "confirm" && "Xác nhận đơn hàng"}
                     {modalType === "start" && "Bắt đầu sửa chữa"}
                     {modalType === "complete" && "Hoàn thành sửa chữa"}
+                    {modalType === "complete_warranty" && "Hoàn thành bảo hành"}
                     {modalType === "reject" && "Từ chối đơn hàng"}
                   </h2>
                   <button onClick={closeModal} className="close-button">
@@ -526,9 +601,10 @@ const Orders = () => {
                                 workDescription: e.target.value,
                               })
                             }
-                            placeholder="Mô tả chi tiết những gì đã làm..."
+                            placeholder="Mô tả công việc đã hoàn thành..."
                             className="form-textarea"
                             rows="3"
+                            required
                           />
                         </div>
                         <div className="form-group">
@@ -565,6 +641,48 @@ const Orders = () => {
                             }
                             placeholder="Để trống nếu không thay đổi"
                             className="form-input"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {modalType === "complete_warranty" && (
+                      <>
+                        <div className="form-group">
+                          <label htmlFor="workDescription">
+                            Mô tả công việc bảo hành đã thực hiện:
+                          </label>
+                          <textarea
+                            id="workDescription"
+                            value={modalData.workDescription}
+                            onChange={(e) =>
+                              setModalData({
+                                ...modalData,
+                                workDescription: e.target.value,
+                              })
+                            }
+                            placeholder="Mô tả công việc bảo hành đã hoàn thành..."
+                            className="form-textarea"
+                            rows="3"
+                            required
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label htmlFor="partsUsed">
+                            Linh kiện đã sử dụng:
+                          </label>
+                          <textarea
+                            id="partsUsed"
+                            value={modalData.partsUsed}
+                            onChange={(e) =>
+                              setModalData({
+                                ...modalData,
+                                partsUsed: e.target.value,
+                              })
+                            }
+                            placeholder="Danh sách linh kiện đã thay thế trong bảo hành..."
+                            className="form-textarea"
+                            rows="2"
                           />
                         </div>
                       </>
@@ -612,6 +730,8 @@ const Orders = () => {
                       ? "Bắt đầu"
                       : modalType === "complete"
                       ? "Hoàn thành"
+                      : modalType === "complete_warranty"
+                      ? "Hoàn thành bảo hành"
                       : "Xác nhận"}
                   </button>
                 </div>

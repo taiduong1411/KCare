@@ -3,6 +3,7 @@ const Service = require("../model/service.model");
 const Technician = require("../model/technician.model");
 const { decodeToken } = require("../services/tokenDecode");
 const mongoose = require("mongoose");
+const jwt = require("jsonwebtoken");
 
 // Helper function để tạo mã đơn hàng
 const generateOrderCode = async () => {
@@ -602,6 +603,57 @@ const reassignTechnician = async (booking) => {
     console.error("Error in reassignTechnician:", error);
     return { success: false, booking, error: error.message };
   }
+};
+
+// Helper function to extract district from address
+const extractDistrict = (address) => {
+  if (!address) return null;
+
+  const districts = [
+    "Quận 1",
+    "Quận 2",
+    "Quận 3",
+    "Quận 4",
+    "Quận 5",
+    "Quận 6",
+    "Quận 7",
+    "Quận 8",
+    "Quận 9",
+    "Quận 10",
+    "Quận 11",
+    "Quận 12",
+    "Quận Bình Thạnh",
+    "Quận Gò Vấp",
+    "Quận Tân Bình",
+    "Quận Tân Phú",
+    "Quận Phú Nhuận",
+    "Quận Bình Tân",
+    "Huyện Bình Chánh",
+    "Huyện Hóc Môn",
+    "Huyện Củ Chi",
+    "Huyện Nhà Bè",
+    "Huyện Cần Giờ",
+    "Thành phố Thủ Đức",
+  ];
+
+  for (const district of districts) {
+    if (address.includes(district)) {
+      return district;
+    }
+  }
+
+  return null;
+};
+
+// Helper function to format date and time for display
+const formatDateTimeForDisplay = (dateTime) => {
+  return new Date(dateTime).toLocaleDateString("vi-VN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 };
 
 const BookingController = {
@@ -2076,20 +2128,29 @@ const BookingController = {
         booking.price.amount = finalPrice;
       }
 
-      // Update status to completed
-      booking.status = "completed";
-      booking.payment.status = "pending"; // Customer needs to pay
+      // Update status to pending customer confirmation
+      booking.status = "pending_customer_confirmation";
+      booking.payment.status = "pending"; // Customer needs to pay after confirmation
 
-      // Calculate commission
+      // Set customer confirmation timeout (2 minutes)
+      const now = new Date();
+      const timeoutDate = new Date(now.getTime() + 2 * 60 * 1000); // 2 minutes
+
+      booking.customerConfirmation = {
+        confirmationTimeout: timeoutDate,
+        confirmationAssignedAt: now,
+      };
+
+      // Calculate commission amount (but don't set as eligible yet)
       const commissionAmount =
         (booking.price.amount * booking.service.commissionRate) / 100;
       booking.commission = {
-        status: "eligible",
+        status: "pending",
         amount: commissionAmount,
       };
 
       // Create completion description
-      let description = `Kỹ thuật viên ${booking.technician.account.fullName} đã hoàn thành sửa chữa`;
+      let description = `Kỹ thuật viên ${booking.technician.account.fullName} đã hoàn thành sửa chữa và chờ khách hàng xác nhận`;
       if (workDescription) {
         description += `. Công việc đã thực hiện: ${workDescription}`;
       }
@@ -2104,24 +2165,16 @@ const BookingController = {
       }
 
       booking.timeline.push({
-        status: "completed",
+        status: "pending_customer_confirmation",
         description: description,
         createdAt: new Date(),
       });
 
       await booking.save();
 
-      // Update technician stats
-      await Technician.findByIdAndUpdate(booking.technician._id, {
-        $inc: {
-          completedJobs: 1,
-          totalEarnings: commissionAmount,
-        },
-      });
-
       return res.status(200).json({
         success: true,
-        message: "Hoàn thành sửa chữa thành công",
+        message: "Hoàn thành sửa chữa thành công, chờ khách hàng xác nhận",
         data: booking,
       });
     } catch (error) {
@@ -2259,6 +2312,1185 @@ const BookingController = {
       return res.status(500).json({
         success: false,
         message: "Lỗi server khi kiểm tra timeout",
+        error: error.message,
+      });
+    }
+  },
+
+  // Customer confirms completion (pending_customer_confirmation -> completed)
+  confirmCompletion: async (req, res) => {
+    try {
+      const { bookingId } = req.params;
+      const { rating, comment } = req.body;
+
+      // Decode token để lấy customer info
+      const decodedToken = decodeToken(req.headers["authorization"]);
+      if (!decodedToken) {
+        return res.status(401).json({
+          success: false,
+          message: "Token không hợp lệ hoặc đã hết hạn",
+        });
+      }
+
+      // Validate bookingId
+      if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+        return res.status(400).json({
+          success: false,
+          message: "ID đơn hàng không hợp lệ",
+        });
+      }
+
+      // Find booking
+      const booking = await RepairRequest.findById(bookingId)
+        .populate("customer", "fullName email phone")
+        .populate("service", "name description commissionRate")
+        .populate({
+          path: "technician",
+          populate: {
+            path: "account",
+            select: "fullName phone",
+          },
+        });
+
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy đơn hàng",
+        });
+      }
+
+      // Check if customer owns this booking
+      if (booking.customer._id.toString() !== decodedToken.id) {
+        return res.status(403).json({
+          success: false,
+          message: "Bạn không có quyền xử lý đơn hàng này",
+        });
+      }
+
+      // Check if booking is in pending_customer_confirmation status
+      if (booking.status !== "pending_customer_confirmation") {
+        return res.status(400).json({
+          success: false,
+          message: `Đơn hàng đang ở trạng thái '${booking.status}', không thể xác nhận`,
+        });
+      }
+
+      // Update status to completed
+      booking.status = "completed";
+      booking.payment.status = "pending"; // Customer needs to pay
+
+      // Mark commission as eligible
+      booking.commission.status = "eligible";
+
+      // Save customer confirmation and clear timeout
+      booking.customerConfirmation.confirmedAt = new Date();
+      booking.customerConfirmation.satisfied = true;
+      booking.customerConfirmation.confirmationTimeout = undefined;
+      booking.customerConfirmation.confirmationAssignedAt = undefined;
+
+      // Save feedback if provided
+      if (rating || comment) {
+        booking.feedback = {
+          rating: rating || 5,
+          comment: comment || "",
+          createdAt: new Date(),
+        };
+      }
+
+      // Add to timeline
+      booking.timeline.push({
+        status: "completed",
+        description: `Khách hàng ${
+          booking.customer.fullName
+        } đã xác nhận hoàn thành công việc${
+          rating ? ` và đánh giá ${rating} sao` : ""
+        }`,
+        createdAt: new Date(),
+      });
+
+      await booking.save();
+
+      // Update technician stats
+      await Technician.findByIdAndUpdate(booking.technician._id, {
+        $inc: {
+          completedJobs: 1,
+          totalEarnings: booking.commission.amount,
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Xác nhận hoàn thành thành công",
+        data: booking,
+      });
+    } catch (error) {
+      console.error("Error confirming completion:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi server khi xác nhận hoàn thành",
+        error: error.message,
+      });
+    }
+  },
+
+  // Customer reports complaint (pending_customer_confirmation -> complaint)
+  reportComplaint: async (req, res) => {
+    try {
+      const { bookingId } = req.params;
+      const { reason, description } = req.body;
+
+      // Validate input
+      if (!reason || !description) {
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng cung cấp lý do và mô tả khiếu nại",
+        });
+      }
+
+      // Decode token để lấy customer info
+      const decodedToken = decodeToken(req.headers["authorization"]);
+      if (!decodedToken) {
+        return res.status(401).json({
+          success: false,
+          message: "Token không hợp lệ hoặc đã hết hạn",
+        });
+      }
+
+      // Validate bookingId
+      if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+        return res.status(400).json({
+          success: false,
+          message: "ID đơn hàng không hợp lệ",
+        });
+      }
+
+      // Find booking
+      const booking = await RepairRequest.findById(bookingId)
+        .populate("customer", "fullName email phone")
+        .populate("service", "name description")
+        .populate({
+          path: "technician",
+          populate: {
+            path: "account",
+            select: "fullName phone",
+          },
+        });
+
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy đơn hàng",
+        });
+      }
+
+      // Check if customer owns this booking
+      if (booking.customer._id.toString() !== decodedToken.id) {
+        return res.status(403).json({
+          success: false,
+          message: "Bạn không có quyền xử lý đơn hàng này",
+        });
+      }
+
+      // Check if booking is in pending_customer_confirmation status
+      if (booking.status !== "pending_customer_confirmation") {
+        return res.status(400).json({
+          success: false,
+          message: `Đơn hàng đang ở trạng thái '${booking.status}', không thể khiếu nại`,
+        });
+      }
+
+      // Update status to pending admin review
+      booking.status = "pending_admin_review";
+
+      // Keep commission as pending (not eligible) until admin decides
+      booking.commission.status = "pending";
+
+      // Save customer complaint and clear timeout
+      booking.customerConfirmation.confirmedAt = new Date();
+      booking.customerConfirmation.satisfied = false;
+      booking.customerConfirmation.complaintReason = reason;
+      booking.customerConfirmation.complaintDescription = description;
+      booking.customerConfirmation.confirmationTimeout = undefined;
+      booking.customerConfirmation.confirmationAssignedAt = undefined;
+
+      // Add to timeline
+      booking.timeline.push({
+        status: "pending_admin_review",
+        description: `Khách hàng ${booking.customer.fullName} không hài lòng và tạo khiếu nại: ${reason}. Chờ admin duyệt.`,
+        createdAt: new Date(),
+      });
+
+      await booking.save();
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Khiếu nại đã được ghi nhận. Chúng tôi sẽ xử lý trong thời gian sớm nhất.",
+        data: booking,
+      });
+    } catch (error) {
+      console.error("Error reporting complaint:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi server khi ghi nhận khiếu nại",
+        error: error.message,
+      });
+    }
+  },
+
+  // Customer cancels complaint (complaint -> completed)
+  cancelComplaint: async (req, res) => {
+    try {
+      const { bookingId } = req.params;
+      const { rating, comment } = req.body;
+
+      // Decode token để lấy customer info
+      const decodedToken = decodeToken(req.headers["authorization"]);
+      if (!decodedToken) {
+        return res.status(401).json({
+          success: false,
+          message: "Token không hợp lệ hoặc đã hết hạn",
+        });
+      }
+
+      // Validate bookingId
+      if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+        return res.status(400).json({
+          success: false,
+          message: "ID đơn hàng không hợp lệ",
+        });
+      }
+
+      // Find booking
+      const booking = await RepairRequest.findById(bookingId)
+        .populate("customer", "fullName email phone")
+        .populate("service", "name description commissionRate")
+        .populate({
+          path: "technician",
+          populate: {
+            path: "account",
+            select: "fullName phone",
+          },
+        });
+
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy đơn hàng",
+        });
+      }
+
+      // Check if customer owns this booking
+      if (booking.customer._id.toString() !== decodedToken.id) {
+        return res.status(403).json({
+          success: false,
+          message: "Bạn không có quyền xử lý đơn hàng này",
+        });
+      }
+
+      // Check if booking is in pending_admin_review or warranty_requested status
+      if (
+        !["pending_admin_review", "warranty_requested"].includes(booking.status)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: `Đơn hàng đang ở trạng thái '${booking.status}', không thể hủy khiếu nại`,
+        });
+      }
+
+      // Update status to completed
+      booking.status = "completed";
+      booking.payment.status = "pending"; // Customer needs to pay
+
+      // Mark commission as eligible
+      booking.commission.status = "eligible";
+
+      // Update customer confirmation and clear timeout
+      booking.customerConfirmation.satisfied = true;
+      booking.customerConfirmation.confirmedAt = new Date();
+      booking.customerConfirmation.confirmationTimeout = undefined;
+      booking.customerConfirmation.confirmationAssignedAt = undefined;
+      // Clear complaint fields
+      booking.customerConfirmation.complaintReason = undefined;
+      booking.customerConfirmation.complaintDescription = undefined;
+
+      // Save feedback if provided
+      if (rating || comment) {
+        booking.feedback = {
+          rating: rating || 5,
+          comment: comment || "",
+          createdAt: new Date(),
+        };
+      }
+
+      // Add to timeline
+      booking.timeline.push({
+        status: "completed",
+        description: `Khách hàng ${
+          booking.customer.fullName
+        } đã hủy khiếu nại và xác nhận hoàn thành công việc${
+          rating ? ` với đánh giá ${rating} sao` : ""
+        }`,
+        createdAt: new Date(),
+      });
+
+      await booking.save();
+
+      // Update technician stats
+      await Technician.findByIdAndUpdate(booking.technician._id, {
+        $inc: {
+          completedJobs: 1,
+          totalEarnings: booking.commission.amount,
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Hủy khiếu nại thành công và xác nhận hoàn thành",
+        data: booking,
+      });
+    } catch (error) {
+      console.error("Error canceling complaint:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi server khi hủy khiếu nại",
+        error: error.message,
+      });
+    }
+  },
+
+  // Check for customer confirmation timeouts and auto-complete orders
+  checkCustomerConfirmationTimeouts: async (req, res) => {
+    try {
+      const now = new Date();
+
+      // Find orders that are pending customer confirmation and have expired timeout
+      const expiredOrders = await RepairRequest.find({
+        status: "pending_customer_confirmation",
+        "customerConfirmation.confirmationTimeout": { $lt: now },
+      })
+        .populate("customer", "fullName email phone")
+        .populate("service", "name description commissionRate")
+        .populate({
+          path: "technician",
+          populate: {
+            path: "account",
+            select: "fullName phone",
+          },
+        });
+
+      console.log(
+        `Found ${expiredOrders.length} expired customer confirmation orders`
+      );
+
+      for (const booking of expiredOrders) {
+        try {
+          // Auto-complete the order
+          booking.status = "completed";
+          booking.payment.status = "pending";
+
+          // Mark commission as eligible
+          booking.commission.status = "eligible";
+
+          // Update customer confirmation
+          booking.customerConfirmation.satisfied = true;
+          booking.customerConfirmation.confirmedAt = new Date();
+
+          // Add automatic completion to timeline
+          booking.timeline.push({
+            status: "completed",
+            description: `Đơn hàng được tự động hoàn thành do khách hàng không xác nhận trong thời hạn 2 phút`,
+            createdAt: new Date(),
+          });
+
+          await booking.save();
+
+          // Update technician stats
+          await Technician.findByIdAndUpdate(booking.technician._id, {
+            $inc: {
+              completedJobs: 1,
+              totalEarnings: booking.commission.amount,
+            },
+          });
+
+          console.log(
+            `Auto-completed order ${booking.orderCode} due to customer confirmation timeout`
+          );
+        } catch (error) {
+          console.error(
+            `Error auto-completing order ${booking.orderCode}:`,
+            error
+          );
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `Processed ${expiredOrders.length} expired customer confirmation orders`,
+        data: { processedCount: expiredOrders.length },
+      });
+    } catch (error) {
+      console.error("Error checking customer confirmation timeouts:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi server khi kiểm tra timeout xác nhận khách hàng",
+        error: error.message,
+      });
+    }
+  },
+
+  // Admin gets all complaints (both pending and processed)
+  getAllComplaints: async (req, res) => {
+    try {
+      const { status } = req.query; // pending, processed, all
+
+      let query = {
+        "customerConfirmation.complaintReason": { $exists: true },
+      };
+
+      // Filter by status if provided
+      if (status === "pending") {
+        query.status = "pending_admin_review";
+      } else if (status === "processed") {
+        query["adminReview.reviewedAt"] = { $exists: true };
+      }
+      // If status is 'all' or not provided, get all complaints
+
+      const complaints = await RepairRequest.find(query)
+        .populate("customer", "fullName email phone")
+        .populate("service", "name description")
+        .populate({
+          path: "technician",
+          populate: {
+            path: "account",
+            select: "fullName phone",
+          },
+        })
+        .sort({ createdAt: -1 });
+
+      return res.status(200).json({
+        success: true,
+        message: "Lấy danh sách khiếu nại thành công",
+        data: complaints,
+      });
+    } catch (error) {
+      console.error("Error getting complaints:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi server khi lấy danh sách khiếu nại",
+        error: error.message,
+      });
+    }
+  },
+
+  // Legacy function for backward compatibility - will be removed later
+  getComplaintsPendingReview: async (req, res) => {
+    try {
+      const complaints = await RepairRequest.find({
+        status: "pending_admin_review",
+      })
+        .populate("customer", "fullName email phone")
+        .populate("service", "name description")
+        .populate({
+          path: "technician",
+          populate: {
+            path: "account",
+            select: "fullName phone",
+          },
+        })
+        .sort({ createdAt: -1 });
+
+      return res.status(200).json({
+        success: true,
+        message: "Lấy danh sách khiếu nại thành công",
+        data: complaints,
+      });
+    } catch (error) {
+      console.error("Error getting complaints:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi server khi lấy danh sách khiếu nại",
+        error: error.message,
+      });
+    }
+  },
+
+  // Admin reviews complaint (approve/reject)
+  reviewComplaint: async (req, res) => {
+    try {
+      const { bookingId } = req.params;
+      const {
+        decision,
+        reason,
+        assignedTechnicianId,
+        scheduledDate,
+        scheduledTime,
+      } = req.body;
+
+      // Validate input
+      if (!decision || !["approved", "rejected"].includes(decision)) {
+        return res.status(400).json({
+          success: false,
+          message: "Quyết định không hợp lệ (approved/rejected)",
+        });
+      }
+
+      if (!reason) {
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng cung cấp lý do quyết định",
+        });
+      }
+
+      // Additional validation for approved complaints
+      if (decision === "approved") {
+        if (!assignedTechnicianId) {
+          return res.status(400).json({
+            success: false,
+            message: "Vui lòng chọn kỹ thuật viên cho việc bảo hành",
+          });
+        }
+
+        if (!scheduledDate || !scheduledTime) {
+          return res.status(400).json({
+            success: false,
+            message: "Vui lòng chọn ngày và giờ thực hiện bảo hành",
+          });
+        }
+      }
+
+      // Decode admin token
+      const decodedToken = decodeToken(req.headers["authorization"]);
+      if (!decodedToken || decodedToken.role !== "admin") {
+        return res.status(403).json({
+          success: false,
+          message: "Không có quyền truy cập",
+        });
+      }
+
+      // Find booking
+      const booking = await RepairRequest.findById(bookingId)
+        .populate("customer", "fullName email phone")
+        .populate("service", "name description commissionRate")
+        .populate({
+          path: "technician",
+          populate: {
+            path: "account",
+            select: "fullName phone",
+          },
+        });
+
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy đơn hàng",
+        });
+      }
+
+      if (booking.status !== "pending_admin_review") {
+        return res.status(400).json({
+          success: false,
+          message: "Đơn hàng không ở trạng thái chờ duyệt",
+        });
+      }
+
+      // Update admin review
+      booking.adminReview = {
+        reviewedBy: decodedToken.id,
+        reviewedAt: new Date(),
+        decision,
+        reason,
+      };
+
+      if (decision === "approved") {
+        // Store original technician info before reassigning
+        const originalTechnicianId = booking.technician._id;
+        const originalTechnicianName =
+          booking.technician.account?.fullName || booking.technician.fullName;
+
+        // If approved, create warranty request
+        booking.status = "warranty_requested";
+        booking.commission.status = "rejected"; // Original technician loses commission
+
+        // Increase complaint count for ORIGINAL technician (the one being complained about)
+        await Technician.findByIdAndUpdate(originalTechnicianId, {
+          $inc: { complaintCount: 1 },
+        });
+
+        console.log(
+          `🔸 Increased complaint count for original technician: ${originalTechnicianName} (ID: ${originalTechnicianId})`
+        );
+
+        // Check if original technician should be locked (5 complaints)
+        const originalTechnician = await Technician.findById(
+          originalTechnicianId
+        );
+        if (originalTechnician.complaintCount >= 5) {
+          await Technician.findByIdAndUpdate(originalTechnicianId, {
+            status: "banned",
+            "lockInfo.isLocked": true,
+            "lockInfo.lockReason": "Vượt quá số lần khiếu nại cho phép (5 lần)",
+            "lockInfo.lockedAt": new Date(),
+            "lockInfo.lockedBy": decodedToken.id,
+          });
+
+          // Add notification to timeline
+          booking.timeline.push({
+            status: "technician_banned",
+            description: `Kỹ thuật viên ${originalTechnicianName} đã bị khóa tài khoản do vượt quá số lần khiếu nại cho phép`,
+            createdAt: new Date(),
+          });
+
+          console.log(
+            `🔒 Locked technician account: ${originalTechnicianName} (5+ complaints)`
+          );
+        }
+
+        // Assign new technician if provided
+        if (assignedTechnicianId) {
+          // Validate new technician
+          const newTechnician = await Technician.findById(assignedTechnicianId);
+          if (!newTechnician) {
+            return res.status(400).json({
+              success: false,
+              message: "Kỹ thuật viên được chọn không tồn tại",
+            });
+          }
+
+          // Create new scheduled time for warranty
+          const warrantyDateTime = createDateTime(scheduledDate, scheduledTime);
+
+          // Check technician availability for warranty time
+          const service = await Service.findById(booking.service);
+          const serviceDuration = service ? service.duration : 120; // Default 2 hours
+
+          const isAvailable = await checkTechnicianAvailability(
+            assignedTechnicianId,
+            warrantyDateTime,
+            serviceDuration
+          );
+
+          if (!isAvailable) {
+            return res.status(400).json({
+              success: false,
+              message:
+                "Kỹ thuật viên đã có lịch trình khác trong thời gian này. Vui lòng chọn kỹ thuật viên khác hoặc thời gian khác.",
+            });
+          }
+
+          booking.adminReview.assignedTechnician = assignedTechnicianId;
+          booking.technician = assignedTechnicianId; // Assign new technician for warranty
+          booking.scheduledTime = warrantyDateTime; // Set new scheduled time
+
+          // Create commission for new technician
+          booking.commission = {
+            status: "pending",
+            amount: booking.commission.amount, // Same commission amount
+          };
+
+          booking.timeline.push({
+            status: "warranty_requested",
+            description: `Admin đã duyệt khiếu nại. Kỹ thuật viên ${originalTechnicianName} bị tăng complaint count. Phân công kỹ thuật viên mới: ${
+              newTechnician.account?.fullName || newTechnician.fullName
+            }. Thời gian: ${formatDateTimeForDisplay(warrantyDateTime)}`,
+            createdAt: new Date(),
+          });
+
+          console.log(
+            `✅ Assigned new technician for warranty: ${
+              newTechnician.account?.fullName || newTechnician.fullName
+            } (ID: ${assignedTechnicianId})`
+          );
+        } else {
+          booking.timeline.push({
+            status: "warranty_requested",
+            description: `Admin đã duyệt khiếu nại. Kỹ thuật viên ${originalTechnicianName} bị tăng complaint count. Chờ phân công kỹ thuật viên mới.`,
+            createdAt: new Date(),
+          });
+        }
+      } else {
+        // If rejected, complete the order
+        booking.status = "completed";
+        booking.commission.status = "eligible"; // Technician gets commission
+        booking.timeline.push({
+          status: "completed",
+          description: `Admin đã từ chối khiếu nại. Lý do: ${reason}`,
+          createdAt: new Date(),
+        });
+
+        // Update technician stats
+        await Technician.findByIdAndUpdate(booking.technician._id, {
+          $inc: {
+            completedJobs: 1,
+            totalEarnings: booking.commission.amount,
+          },
+        });
+      }
+
+      await booking.save();
+
+      return res.status(200).json({
+        success: true,
+        message: `Đã ${
+          decision === "approved" ? "duyệt" : "từ chối"
+        } khiếu nại`,
+        data: booking,
+      });
+    } catch (error) {
+      console.error("Error reviewing complaint:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi server khi xử lý khiếu nại",
+        error: error.message,
+      });
+    }
+  },
+
+  // Get available technicians for warranty assignment
+  getAvailableTechniciansForWarranty: async (req, res) => {
+    try {
+      const { serviceId, excludeTechnicianId, customerAddress } = req.query;
+
+      console.log("🔍 getAvailableTechniciansForWarranty called with:", {
+        serviceId,
+        excludeTechnicianId,
+        customerAddress,
+      });
+
+      const query = {
+        status: "active",
+        depositStatus: "paid",
+        "lockInfo.isLocked": false,
+      };
+
+      // Exclude original technician
+      if (excludeTechnicianId) {
+        query._id = { $ne: excludeTechnicianId };
+      }
+
+      // Filter by service if provided
+      if (serviceId) {
+        query.$or = [
+          { services: { $in: [serviceId] } },
+          { services: { $size: 0 } },
+          { services: { $exists: false } },
+        ];
+      }
+
+      console.log("📋 Query filter:", query);
+
+      let technicians = await Technician.find(query)
+        .populate("account", "fullName phone")
+        .select(
+          "account fullName phone district experience rating completedJobs complaintCount services"
+        )
+        .sort({ rating: -1, completedJobs: -1 });
+
+      console.log(
+        `✅ Found ${technicians.length} technicians before location filtering`
+      );
+
+      // Filter by location if customer address is provided
+      if (customerAddress) {
+        const customerDistrict = extractDistrict(customerAddress);
+        console.log("📍 Customer district:", customerDistrict);
+
+        if (customerDistrict) {
+          // Sort by location priority: same district first, then adjacent districts
+          technicians = technicians.sort((a, b) => {
+            const aSameDistrict = a.district === customerDistrict ? 1 : 0;
+            const bSameDistrict = b.district === customerDistrict ? 1 : 0;
+
+            if (aSameDistrict !== bSameDistrict) {
+              return bSameDistrict - aSameDistrict; // Same district first
+            }
+
+            const aAdjacent = isAdjacentDistrict(a.district, customerDistrict)
+              ? 1
+              : 0;
+            const bAdjacent = isAdjacentDistrict(b.district, customerDistrict)
+              ? 1
+              : 0;
+
+            if (aAdjacent !== bAdjacent) {
+              return bAdjacent - aAdjacent; // Adjacent districts next
+            }
+
+            // If same location priority, sort by rating and completed jobs
+            if (a.rating !== b.rating) {
+              return b.rating - a.rating;
+            }
+
+            return b.completedJobs - a.completedJobs;
+          });
+        }
+      }
+
+      // Format the response data to ensure proper field mapping
+      const formattedTechnicians = technicians.map((tech) => ({
+        _id: tech._id,
+        fullName: tech.account?.fullName || tech.fullName,
+        phone: tech.account?.phone || tech.phone,
+        district: tech.district,
+        experience: tech.experience,
+        rating: tech.rating,
+        completedJobs: tech.completedJobs,
+        complaintCount: tech.complaintCount,
+      }));
+
+      console.log("🎯 Final technicians list:", formattedTechnicians);
+
+      return res.status(200).json({
+        success: true,
+        message: "Lấy danh sách kỹ thuật viên thành công",
+        data: formattedTechnicians,
+      });
+    } catch (error) {
+      console.error("❌ Error getting available technicians:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi server khi lấy danh sách kỹ thuật viên",
+        error: error.message,
+      });
+    }
+  },
+
+  // Get technician complaint statistics
+  getTechnicianComplaintStats: async (req, res) => {
+    try {
+      const stats = await Technician.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalTechnicians: { $sum: 1 },
+            activeTechnicians: {
+              $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
+            },
+            lockedTechnicians: {
+              $sum: { $cond: ["$lockInfo.isLocked", 1, 0] },
+            },
+            totalComplaints: { $sum: "$complaintCount" },
+            avgComplaintCount: { $avg: "$complaintCount" },
+          },
+        },
+      ]);
+
+      const topComplaintTechnicians = await Technician.find({
+        complaintCount: { $gt: 0 },
+      })
+        .populate("account", "fullName phone")
+        .select("fullName phone complaintCount completedJobs status lockInfo")
+        .sort({ complaintCount: -1 })
+        .limit(10);
+
+      return res.status(200).json({
+        success: true,
+        message: "Lấy thống kê khiếu nại thành công",
+        data: {
+          stats: stats[0] || {
+            totalTechnicians: 0,
+            activeTechnicians: 0,
+            lockedTechnicians: 0,
+            totalComplaints: 0,
+            avgComplaintCount: 0,
+          },
+          topComplaintTechnicians,
+        },
+      });
+    } catch (error) {
+      console.error("Error getting complaint stats:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi server khi lấy thống kê khiếu nại",
+        error: error.message,
+      });
+    }
+  },
+
+  // Get available time slots for a technician on a specific date
+  getAvailableTimeSlots: async (req, res) => {
+    try {
+      const { technicianId, date } = req.query;
+
+      if (!technicianId || !date) {
+        return res.status(400).json({
+          success: false,
+          message: "Thiếu thông tin technicianId hoặc date",
+        });
+      }
+
+      // Validate technician exists
+      const technician = await Technician.findById(technicianId);
+      if (!technician) {
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy kỹ thuật viên",
+        });
+      }
+
+      // Parse date
+      const requestedDate = new Date(date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (requestedDate < today) {
+        return res.status(400).json({
+          success: false,
+          message: "Không thể chọn ngày trong quá khứ",
+        });
+      }
+
+      // Generate available time slots
+      const timeSlots = [];
+      const startHour = 7; // 7:00 AM
+      const endHour = 21; // 9:00 PM
+
+      for (let hour = startHour; hour < endHour; hour++) {
+        const timeSlot = `${hour.toString().padStart(2, "0")}:00`;
+        timeSlots.push(timeSlot);
+      }
+
+      // Check existing bookings for this technician on this date
+      const existingBookings = await RepairRequest.find({
+        "technician._id": technicianId,
+        scheduledTime: {
+          $gte: new Date(date + "T00:00:00.000Z"),
+          $lt: new Date(date + "T23:59:59.999Z"),
+        },
+        status: { $in: ["accepted", "in_progress"] },
+      });
+
+      // Filter out occupied time slots
+      const availableSlots = timeSlots.filter((slot) => {
+        const [hour] = slot.split(":");
+        const slotTime = new Date(date + `T${hour}:00:00.000Z`);
+
+        return !existingBookings.some((booking) => {
+          const bookingTime = new Date(booking.scheduledTime);
+          const timeDiff = Math.abs(slotTime - bookingTime) / (1000 * 60 * 60);
+          return timeDiff < 2; // 2 hour buffer
+        });
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Lấy khung giờ trống thành công",
+        data: availableSlots,
+      });
+    } catch (error) {
+      console.error("Error getting available time slots:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi server khi lấy khung giờ trống",
+        error: error.message,
+      });
+    }
+  },
+
+  // Complete warranty repair (for technician)
+  completeWarrantyRepair: async (req, res) => {
+    try {
+      const { bookingId } = req.params;
+      const { workDescription, partsUsed, notes } = req.body;
+      const token = req.headers.authorization?.split(" ")[1];
+
+      if (!token) {
+        return res.status(401).json({
+          success: false,
+          message: "Token không hợp lệ",
+        });
+      }
+
+      const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
+      const technicianId = decodedToken.id;
+
+      // Find booking
+      const booking = await RepairRequest.findById(bookingId)
+        .populate("technician", "account")
+        .populate("customer", "fullName phone")
+        .populate("service", "name");
+
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy đơn hàng",
+        });
+      }
+
+      // Check if technician is assigned to this booking
+      if (booking.technician._id.toString() !== technicianId) {
+        return res.status(403).json({
+          success: false,
+          message: "Bạn không có quyền thực hiện hành động này",
+        });
+      }
+
+      // Check if booking is in warranty_requested status
+      if (booking.status !== "warranty_requested") {
+        return res.status(400).json({
+          success: false,
+          message: "Đơn hàng không ở trạng thái bảo hành",
+        });
+      }
+
+      // Update booking status to warranty_completed
+      booking.status = "warranty_completed";
+      booking.warrantyWork = {
+        completedAt: new Date(),
+        workDescription: workDescription || "Đã hoàn thành bảo hành",
+        partsUsed: partsUsed || [],
+        notes: notes || "",
+      };
+
+      // Add to timeline
+      booking.timeline.push({
+        status: "warranty_completed",
+        description: `Kỹ thuật viên đã hoàn thành bảo hành: ${
+          workDescription || "Đã hoàn thành bảo hành"
+        }`,
+        createdAt: new Date(),
+      });
+
+      await booking.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Hoàn thành bảo hành thành công",
+        data: booking,
+      });
+    } catch (error) {
+      console.error("Error completing warranty repair:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi server khi hoàn thành bảo hành",
+        error: error.message,
+      });
+    }
+  },
+
+  // Customer confirms warranty completion
+  confirmWarrantyCompletion: async (req, res) => {
+    try {
+      const { bookingId } = req.params;
+      const { rating, comment } = req.body;
+
+      // Find booking
+      const booking = await RepairRequest.findById(bookingId)
+        .populate("technician", "account")
+        .populate("customer", "fullName phone")
+        .populate("service", "name");
+
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy đơn hàng",
+        });
+      }
+
+      // Check if booking is in warranty_completed status
+      if (booking.status !== "warranty_completed") {
+        return res.status(400).json({
+          success: false,
+          message: "Đơn hàng không ở trạng thái chờ xác nhận bảo hành",
+        });
+      }
+
+      // Update booking status to completed
+      booking.status = "completed";
+      booking.warrantyConfirmation = {
+        confirmedAt: new Date(),
+        satisfied: true,
+        rating: rating || 5,
+        comment: comment || "",
+      };
+
+      // Add to timeline
+      booking.timeline.push({
+        status: "warranty_confirmed",
+        description: `Khách hàng đã xác nhận hài lòng với dịch vụ bảo hành. Đánh giá: ${
+          rating || 5
+        } sao`,
+        createdAt: new Date(),
+      });
+
+      await booking.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Xác nhận bảo hành thành công",
+        data: booking,
+      });
+    } catch (error) {
+      console.error("Error confirming warranty completion:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi server khi xác nhận bảo hành",
+        error: error.message,
+      });
+    }
+  },
+
+  // Customer reports warranty complaint
+  reportWarrantyComplaint: async (req, res) => {
+    try {
+      const { bookingId } = req.params;
+      const { reason, description } = req.body;
+
+      if (!reason || !description) {
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng cung cấp lý do và mô tả khiếu nại",
+        });
+      }
+
+      // Find booking
+      const booking = await RepairRequest.findById(bookingId)
+        .populate("technician", "account")
+        .populate("customer", "fullName phone")
+        .populate("service", "name");
+
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy đơn hàng",
+        });
+      }
+
+      // Check if booking is in warranty_completed status
+      if (booking.status !== "warranty_completed") {
+        return res.status(400).json({
+          success: false,
+          message: "Đơn hàng không ở trạng thái chờ xác nhận bảo hành",
+        });
+      }
+
+      // Update booking status to pending_admin_review
+      booking.status = "pending_admin_review";
+      booking.warrantyComplaint = {
+        complainedAt: new Date(),
+        reason: reason,
+        description: description,
+      };
+
+      // Add to timeline
+      booking.timeline.push({
+        status: "warranty_complaint",
+        description: `Khách hàng đã khiếu nại về dịch vụ bảo hành. Lý do: ${reason}`,
+        createdAt: new Date(),
+      });
+
+      await booking.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Ghi nhận khiếu nại bảo hành thành công",
+        data: booking,
+      });
+    } catch (error) {
+      console.error("Error reporting warranty complaint:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi server khi ghi nhận khiếu nại bảo hành",
         error: error.message,
       });
     }
